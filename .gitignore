@@ -38,3 +38,8 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# CSED311 Build results
+.stamp.*
+obj_dir
+waveform.vcd
