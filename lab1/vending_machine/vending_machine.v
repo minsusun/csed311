@@ -17,7 +17,7 @@ module vending_machine (
 	i_input_coin,				// coin is inserted.
 	i_select_item,				// item is selected.
 	i_trigger_return,			// change-return is triggered 
-
+	
 	o_available_item,			// Sign of the item availability
 	o_output_item,			// Sign of the item withdrawal
 	o_return_coin				// Sign of the coin return
@@ -64,6 +64,7 @@ module vending_machine (
 	vm_timer m_vm_timer(
 		.clk(clk),
 		.reset_n(reset_n),
+		.i_trigger_return(i_trigger_return),
 		.i_input_coin(i_input_coin),
 		.i_select_item(i_select_item),
 		.o_available_item(o_available_item),
@@ -78,7 +79,6 @@ module vending_machine (
 	);
 
 	vm_merchant m_vm_merchant(
-		.i_trigger_return(i_trigger_return),
 		.i_input_coin(i_input_coin),
 		.i_select_item(i_select_item),
 		.item_price(item_price),
