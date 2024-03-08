@@ -1,7 +1,6 @@
 `include "vending_machine_def.v"
 
 module vm_merchant(
-    i_trigger_return,
     i_input_coin,
     i_select_item,
     item_price,
@@ -13,7 +12,6 @@ module vm_merchant(
     current_total_nxt,
     o_return_coin
 );
-    input i_trigger_return;
     input [`kNumCoins - 1: 0] i_input_coin;
     input [`kNumItems - 1: 0] i_select_item;
     input [31: 0] item_price[`kNumItems - 1: 0];
@@ -44,14 +42,13 @@ module vm_merchant(
     always @(*) begin
         o_return_coin = 0;
         return_total = 0;
-        if(i_trigger_return || wait_time == 0) begin
+        if(wait_time == 0) begin
             for(i = `kNumCoins - 1; i >= 0 && current_total - return_total != 0 ; i = i - 1) begin
                 if(current_total - return_total >= coin_value[i]) begin
                     o_return_coin[i] = 1;
                     return_total = return_total + coin_value[i];
                 end
             end
-            $display("return %d\n",return_total);
         end
     end
 
