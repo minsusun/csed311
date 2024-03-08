@@ -45,12 +45,13 @@ module vm_merchant(
         o_return_coin = 0;
         return_total = 0;
         if(i_trigger_return || wait_time == 0) begin
-            for(i = 0; i < `kNumCoins; i = i + 1) begin
+            for(i = `kNumCoins - 1; i >= 0 && current_total - return_total != 0 ; i = i - 1) begin
                 if(current_total - return_total >= coin_value[i]) begin
                     o_return_coin[i] = 1;
                     return_total = return_total + coin_value[i];
                 end
             end
+            $display("return %d\n",return_total);
         end
     end
 
