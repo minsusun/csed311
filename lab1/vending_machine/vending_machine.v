@@ -5,6 +5,10 @@
 
 `include "vending_machine_def.v"
 
+`include "vm_timer.v"
+`include "vm_state.v"
+`include "vm_merchant.v"
+
 
 module vending_machine (
 	clk,							// Clock signal
@@ -57,36 +61,69 @@ module vending_machine (
 	wire [`kTotalBits-1:0] input_total, output_total, return_total;
 	wire [31:0] wait_time;
 
+	vm_timer m_vm_timer(
+		.clk(clk),
+		.reset_n(reset_n),
+		.i_input_coin(i_input_coin),
+		.i_select_item(i_select_item),
+		.item_price(item_price),
+		.coin_value(coin_value)
+		.current_total(current_total)
+	);
+
+	vm_state m_vm_state(
+		.clk(clk),
+		.reset_n(reset_n),
+		.current_total_nxt(current_total_nxt),
+		.current_total(current_total)
+	);
+
+	vm_merchant m_vm_merchant(
+		.i_trigger_return(i_trigger_return),
+		.i_input_coin(i_input_coin),
+		.i_select_item(i_select_item),
+		.item_price(item_price),
+		.coin_value(coin_value),
+		.current_total(current_total),
+		.o_available_item(o_available_item),
+		.o_output_item(o_output_item),
+		.current_total_nxt(current_total_nxt),
+		.input_total(input_total),
+		.output_total(output_total),
+		.return_total(return_total),
+		.o_return_coin(o_return_coin)
+	);
+
 
 	// This module interface, structure, and given a number of modules are not mandatory but recommended.
 	// However, Implementations that use modules are mandatory.
 		
-  	check_time_and_coin check_time_and_coin_module(.i_input_coin(i_input_coin),
-  									.i_select_item(i_select_item),
-									.clk(clk),
-									.reset_n(reset_n),
-									.wait_time(wait_time),
-									.o_return_coin(o_return_coin));
+  	// check_time_and_coin check_time_and_coin_module(.i_input_coin(i_input_coin),
+  	// 								.i_select_item(i_select_item),
+	// 								.clk(clk),
+	// 								.reset_n(reset_n),
+	// 								.wait_time(wait_time),
+	// 								.o_return_coin(o_return_coin));
 
-	calculate_current_state calculate_current_state_module(.i_input_coin(i_input_coin),
-										.i_select_item(i_select_item),
-										.item_price(item_price),
-										.coin_value(coin_value),
-										.current_total(current_total),
-										.input_total(input_total),
-										.output_total(output_total),
-										.return_total(return_total),
-										.current_total_nxt(current_total_nxt),
-										.wait_time(wait_time),
-										.o_return_coin(o_return_coin),
-										.o_available_item(o_available_item),
-										.o_output_item(o_output_item));
+	// calculate_current_state calculate_current_state_module(.i_input_coin(i_input_coin),
+	// 									.i_select_item(i_select_item),
+	// 									.item_price(item_price),
+	// 									.coin_value(coin_value),
+	// 									.current_total(current_total),
+	// 									.input_total(input_total),
+	// 									.output_total(output_total),
+	// 									.return_total(return_total),
+	// 									.current_total_nxt(current_total_nxt),
+	// 									.wait_time(wait_time),
+	// 									.o_return_coin(o_return_coin),
+	// 									.o_available_item(o_available_item),
+	// 									.o_output_item(o_output_item));
 	
-  	change_state change_state_module(
-						.clk(clk),
-						.reset_n(reset_n),
-						.current_total_nxt(current_total_nxt),
-						.current_total(current_total));
+  	// change_state change_state_module(
+	// 					.clk(clk),
+	// 					.reset_n(reset_n),
+	// 					.current_total_nxt(current_total_nxt),
+	// 					.current_total(current_total));
 
 
 endmodule
