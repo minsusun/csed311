@@ -58,7 +58,7 @@ module vending_machine (
 
 	
 	// Variables. You may add more your own net variables.
-	wire [`kTotalBits-1:0] input_total, output_total, return_total;
+	// wire [`kTotalBits-1:0] input_total, output_total, return_total;
 	wire [31:0] wait_time;
 
 	vm_timer m_vm_timer(
@@ -66,9 +66,8 @@ module vending_machine (
 		.reset_n(reset_n),
 		.i_input_coin(i_input_coin),
 		.i_select_item(i_select_item),
-		.item_price(item_price),
-		.coin_value(coin_value)
-		.current_total(current_total)
+		.o_available_item(o_available_item),
+		.wait_time(wait_time)
 	);
 
 	vm_state m_vm_state(
@@ -85,12 +84,10 @@ module vending_machine (
 		.item_price(item_price),
 		.coin_value(coin_value),
 		.current_total(current_total),
+		.wait_time(wait_time),
 		.o_available_item(o_available_item),
 		.o_output_item(o_output_item),
 		.current_total_nxt(current_total_nxt),
-		.input_total(input_total),
-		.output_total(output_total),
-		.return_total(return_total),
 		.o_return_coin(o_return_coin)
 	);
 
