@@ -5,9 +5,8 @@ module vm_timer(
     reset_n,
     i_input_coin,
     i_select_item,
-    item_price,
-    coin_value,
-    current_total
+    o_available_item,
+    wait_time
 );
     input clk;
     input reset_n;
@@ -21,16 +20,13 @@ module vm_timer(
         wait_time = 0;
     end
 
-    always @(i_input_coin, i_select_item) begin
-        if(i_input_coin != 0 || (i_select_item & o_available_item) != 0)
-            wait_time = `kWaitTime;
-    end
-
     always @(posedge clk) begin
         if(!reset_n)
-            wait_time = 0;
-        else if(wait_time)
-            wait_time = wait_time - 1;
+            wait_time <= 0;
+        else if(i_input_coin != 0 || (i_select_item & o_available_item) != 0)
+            wait_time <= `kWaitTime;
+        else if(wait_time != 0)
+            wait_time <= wait_time - 1;
     end
 
 endmodule
