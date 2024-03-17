@@ -8,6 +8,15 @@
 // 3. You might need to describe combinational logics to drive them into the module (e.g., mux, and, or, ...)
 // 4. `include files if required
 
+`include "pc.v"
+`include "instruction_memory.v"
+`include "register_file.v"
+`include "control_unit.v"
+`include "immediate_generator.v"
+`include "alu_control_unit.v"
+`include "alu.v"
+`include "data_memory.v"
+
 module cpu(input reset,                     // positive reset signal
            input clk,                       // clock signal
            output is_halted,                // Whehther to finish simulation
@@ -19,8 +28,8 @@ module cpu(input reset,                     // positive reset signal
   // ---------- Update program counter ----------
   // PC must be updated on the rising edge (positive edge) of the clock.
   pc pc(
-    .reset(),       // input (Use reset to initialize PC. Initial value must be 0)
-    .clk(),         // input
+    .reset(reset),       // input (Use reset to initialize PC. Initial value must be 0)
+    .clk(clk),         // input
     .next_pc(),     // input
     .current_pc()   // output
   );
@@ -35,16 +44,16 @@ module cpu(input reset,                     // positive reset signal
 
   // ---------- Register File ----------
   register_file reg_file (
-    .reset (),        // input
-    .clk (),          // input
-    .rs1 (),          // input
-    .rs2 (),          // input
-    .rd (),           // input
-    .rd_din (),       // input
-    .write_enable (), // input
-    .rs1_dout (),     // output
-    .rs2_dout (),     // output
-    .print_reg (print_reg)  //DO NOT TOUCH THIS
+    .reset(reset),        // input
+    .clk(clk),          // input
+    .rs1(),          // input
+    .rs2(),          // input
+    .rd(),           // input
+    .rd_din(),       // input
+    .write_enable(), // input
+    .rs1_dout(),     // output
+    .rs2_dout(),     // output
+    .print_reg(print_reg)  //DO NOT TOUCH THIS
   );
 
 
@@ -86,12 +95,12 @@ module cpu(input reset,                     // positive reset signal
 
   // ---------- Data Memory ----------
   data_memory dmem(
-    .reset (),      // input
-    .clk (),        // input
-    .addr (),       // input
-    .din (),        // input
-    .mem_read (),   // input
-    .mem_write (),  // input
-    .dout ()        // output
+    .reset(reset),      // input
+    .clk(clk),        // input
+    .addr(),       // input
+    .din(),        // input
+    .mem_read(),   // input
+    .mem_write(),  // input
+    .dout()        // output
   );
 endmodule
