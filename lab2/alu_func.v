@@ -20,3 +20,22 @@
 `define BRANCH_NE   2'b01
 `define BRANCH_LT   2'b10
 `define BRANCH_GE   2'b11
+
+// This is proper set of ALU opcodes,
+// but we're following instructions on lecture note
+// `define ALU_ADD     4'b0000
+// `define ALU_SUB     4'b0001
+// `define ALU_SLL     4'b0010
+// `define ALU_SLT     4'b0011
+// `define ALU_SLT     4'b0100
+// `define ALU_XOR     4'b0101
+// `define ALU_SRL     4'b0110
+// `define ALU_SRA     4'b0111
+// `define ALU_OR      4'b1000
+// `define ALU_AND     4'b1001
+// `define ALU_BEQ     4'b1010
+// `define ALU_BNE     4'b1011
+// `define ALU_BLT     4'b1100
+// `define ALU_BGE     4'b1101
+// `define ALU_BLT     4'b1110
+// `define ALU_BGE     4'b1111
