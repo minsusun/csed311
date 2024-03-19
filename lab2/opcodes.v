@@ -13,8 +13,8 @@
 // B-type instruction opcodes
 `define BRANCH          7'b1100011
 // U-type instruction opcodes
-//`define LUI             7'b0110111
-//`define AUIPC           7'b0010111
+`define LUI             7'b0110111
+`define AUIPC           7'b0010111
 // J-type instruction opcodes
 `define JAL             7'b1101111
 
