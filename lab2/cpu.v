@@ -1,4 +1,3 @@
-// TODO: Implement ECALL
 // Refer to the lecture 5 pdf, page 34.
 // How about integrating adders and dirty MUX's into pc module?
 

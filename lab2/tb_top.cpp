@@ -80,7 +80,7 @@ int main(int argc, char** argv, char** env) {
         ss.str("");
 
         file >> answer_reg;
-        cout << setw(4) << aliases[i] << " " << reg_hex;
+        cout << setw(4) << i << " " << reg_hex;
 
         if (reg_hex == answer_reg) {
             cout << endl;
