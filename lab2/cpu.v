@@ -30,13 +30,15 @@ module cpu(input reset,                     // positive reset signal
   wire [6:0] opcode = inst[6:0];
   wire [31:0] data;
 
+  wire [1:0] alu_src_1;
+  wire alu_src_2;
+
   wire is_jal;
   wire is_jalr;
   wire branch;
   wire mem_read;
   wire mem_to_reg;
   wire mem_write;
-  wire alu_src;
   wire write_enable;
   wire pc_to_reg;
   wire is_ecall;
@@ -48,6 +50,7 @@ module cpu(input reset,                     // positive reset signal
   reg [4:0] rs1;
   reg [31:0] rd_din;
   reg [31:0] alu_in_2;
+  reg [31:0] alu_in_1;
 
   always @(*) begin
     if(pc_to_reg)
@@ -61,11 +64,19 @@ module cpu(input reset,                     // positive reset signal
   end
 
   always @(*) begin
-    if(alu_src) begin
+    if(alu_src_2)
       alu_in_2 = immediate;
-    end else begin
+    else
       alu_in_2 = rs2_dout;
-    end
+  end
+
+  always @(*) begin
+    if(alu_src_1[1])
+      alu_in_1 = 32'b0;
+    else if(alu_src_1[0])
+      alu_in_1 = current_pc;
+    else
+      alu_in_1 = rs1_dout;
   end
   
   always @(*) begin
@@ -76,7 +87,7 @@ module cpu(input reset,                     // positive reset signal
   end
 
   always @(*) begin
-    if(is_ecall && rs1_dout == 10)
+    if(is_ecall && (rs1_dout == 10))
       is_halted = 1;
     else
       is_halted = 0;
@@ -135,7 +146,8 @@ module cpu(input reset,                     // positive reset signal
     .mem_read(mem_read),      // output
     .mem_to_reg(mem_to_reg),    // output
     .mem_write(mem_write),     // output
-    .alu_src(alu_src),       // output
+    .alu_src_1(alu_src_1),       // output
+    .alu_src_2(alu_src_2),       // output
     .write_enable(write_enable),  // output
     .pc_to_reg(pc_to_reg),     // output
     .is_ecall(is_ecall)       // output (ecall inst)
@@ -160,7 +172,7 @@ module cpu(input reset,                     // positive reset signal
   // ---------- ALU ----------
   alu alu (
     .alu_op(alu_op),      // input
-    .alu_in_1(rs1_dout),    // input  
+    .alu_in_1(alu_in_1),    // input  
     .alu_in_2(alu_in_2),    // input
     .alu_result(alu_result),  // output
     .alu_bcond(alu_bcond)    // output

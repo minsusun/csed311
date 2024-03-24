@@ -8,7 +8,8 @@ module control_unit(
     output reg mem_read,
     output reg mem_to_reg,
     output reg mem_write,
-    output reg alu_src,
+    output reg [1:0] alu_src_1,
+    output reg alu_src_2,
     output reg write_enable,
     output reg pc_to_reg,
     output reg is_ecall
@@ -20,7 +21,9 @@ module control_unit(
         mem_read = (opcode == `LOAD);
         mem_to_reg = (opcode == `LOAD);
         mem_write = (opcode == `STORE);
-        alu_src = ((opcode != `ARITHMETIC) && (opcode != `BRANCH));
+        alu_src_1[1] = (opcode == `LUI);
+        alu_src_1[0] = (opcode == `AUIPC);
+        alu_src_2 = ((opcode != `ARITHMETIC) && (opcode != `BRANCH));
         write_enable = ((opcode != `STORE) && (opcode != `BRANCH));
         pc_to_reg = (opcode == `JALR || opcode == `JAL);
         is_ecall = (opcode == `ECALL);

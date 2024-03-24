@@ -37,7 +37,7 @@ module instruction_memory #(parameter MEM_DEPTH = 1024) (input reset,
       // Where should this file placed in? The same directory with the source code file or cwd when executing testbench?
       // -> The absolute path of the memory file needed. If you want to use relative path, place it into the directory where
       // simulation is run (The directory where verilator command is executed).
-      $readmemh("student_tb/loop_mem.txt", mem);
+      $readmemh("student_tb/lui_auipc_mem.txt", mem);
     end
   end
 

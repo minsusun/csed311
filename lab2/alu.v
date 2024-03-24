@@ -1,5 +1,6 @@
 `include "opcodes.v"
 
+// TODO: Modify alu module and alu_ctrl_unit so that alu_op is only essential 4-bit signal.
 module alu(
     input [16:0] alu_op,
     input [31:0] alu_in_1,
@@ -71,6 +72,16 @@ module alu(
 
         `JAL: begin
             alu_result = 32'b0;
+            alu_bcond = 1'b0;
+        end
+
+        `LUI: begin
+            alu_result = alu_in_1 + alu_in_2;
+            alu_bcond = 1'b0;
+        end
+
+        `AUIPC: begin
+            alu_result = alu_in_1 + alu_in_2;
             alu_bcond = 1'b0;
         end
 
