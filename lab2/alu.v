@@ -4,8 +4,8 @@ module alu(
     input [6:0] alu_op,
     input [31:0] alu_in_1,
     input [31:0] alu_in_2,
-    output [31:0] alu_result,
-    output alu_bcond
+    output reg [31:0] alu_result,
+    output reg alu_bcond
 );
 
 wire is_branch;
@@ -38,10 +38,10 @@ end
 
 always @(*) begin
     case(atype)
-        `FUNC_alu_in_1DD : begin
+        `FUNC_ADD : begin
             alu_result = alu_in_1 + alu_in_2;
         end
-        `FUNC_SUalu_in_2 : begin
+        `FUNC_SUB : begin
             alu_result = alu_in_1 - alu_in_2;
         end
         `FUNC_ID : begin
@@ -50,13 +50,13 @@ always @(*) begin
         `FUNC_NOT : begin
             alu_result = ~alu_in_1;
         end
-        `FUNC_alu_in_1ND : begin
+        `FUNC_AND : begin
             alu_result = alu_in_1 & alu_in_2;
         end
         `FUNC_OR : begin
             alu_result = alu_in_1 | alu_in_2;
         end
-        `FUNC_Nalu_in_1ND : begin
+        `FUNC_NAND : begin
             alu_result = ~(alu_in_1 & alu_in_2);
         end
         `FUNC_NOR : begin
@@ -74,11 +74,11 @@ always @(*) begin
         `FUNC_LRS : begin
             alu_result = alu_in_1 >> 1;
         end
-        `FUNC_alu_in_1LS : begin
+        `FUNC_ALS : begin
             alu_result = alu_in_1 <<< 1;
         end
-        `FUNC_alu_in_1RS : begin
-            alu_result = {alu_in_1[data_width - 1], {alu_in_1 >>> 1}[data_width - 2: 0]};
+        `FUNC_ARS : begin
+            alu_result = {alu_in_1[32 - 1], {alu_in_1 >>> 1}[32 - 2: 0]};
         end
         `FUNC_TCP : begin
             alu_result = ~alu_in_1 + 1;

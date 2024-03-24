@@ -24,21 +24,21 @@ module data_memory #(parameter MEM_DEPTH = 16384) (
     // Asynchrnously read data from the memory
     // Synchronously write data to the memory
     // (use dmem_addr to access memory)
-    assign dout = mem_read ? dout[dmem_addr] : 32'b0;
+    assign dout = mem_read ? mem[dmem_addr] : 32'b0;
 
     // Initialize data memory (do not touch)
     always @(posedge clk) begin
-    if (reset) begin
-        for (i = 0; i < MEM_DEPTH; i = i + 1)
-        // DO NOT TOUCH COMMENT BELOW
-        /* verilator lint_off BLKSEQ */
-        mem[i] = 32'b0;
-        /* verilator lint_on BLKSEQ */
-        // DO NOT TOUCH COMMENT ABOVE
-    end
+        if (reset) begin
+            for (i = 0; i < MEM_DEPTH; i = i + 1)
+            // DO NOT TOUCH COMMENT BELOW
+            /* verilator lint_off BLKSEQ */
+            mem[i] = 32'b0;
+            /* verilator lint_on BLKSEQ */
+            // DO NOT TOUCH COMMENT ABOVE
+        end
     else begin
         if(mem_write)
-            mem[dmem_addr] = din;
+            mem[dmem_addr] <= din;
     end
     end
 endmodule

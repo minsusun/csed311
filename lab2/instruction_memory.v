@@ -1,4 +1,4 @@
-module riscv_instr_mem #(parameter MEM_DEPTH = 1024) (
+module instruction_memory #(parameter MEM_DEPTH = 1024) (
     input reset,
     input clk,
     input [31:0] addr, // address of the instruction memory
@@ -34,7 +34,7 @@ module riscv_instr_mem #(parameter MEM_DEPTH = 1024) (
                 // DO NOT TOUCH COMMENT ABOVE
 
             // Provide path of the file including instructions with binary format
-            $readmemh("/path/to/binary_format/file", mem);
+            $readmemh("/workspace/lab2/student_tb/basic_mem.txt", mem);
         end
     end
 endmodule

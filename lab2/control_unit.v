@@ -23,10 +23,10 @@ assign mem_read = (part_of_inst == `LOAD);
 assign mem_to_reg = (part_of_inst == `LOAD);
 assign mem_write = (part_of_inst == `STORE);
 
-assign alu_src_1 = 2'b00;
-assign alu_src_2 = (part_of_inst != `STORE) && (part_of_inst != BRANCH);
+assign alu_src_1 = 2'b01;
+assign alu_src_2 = (part_of_inst != `STORE) && (part_of_inst != `BRANCH);
 
-assign write_enable = (part_of_inst != `STORE) && (part_of_inst != `BRANCH)
+assign write_enable = (part_of_inst != `STORE) && (part_of_inst != `BRANCH);
 assign pc_to_reg = (part_of_inst == `JAL) || (part_of_inst == `JALR);
 
 assign is_ecall = (part_of_inst == `ECALL);

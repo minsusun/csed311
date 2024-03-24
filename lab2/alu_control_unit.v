@@ -6,9 +6,9 @@ module alu_control_unit(
     output [6:0] alu_op
 );
 
-wire [3:0] atype;
-wire [1:0] btype;
-wire is_branch;
+reg [3:0] atype;
+reg [1:0] btype;
+reg is_branch;
 
 wire funct7;
 wire [2:0]funct3;
@@ -26,9 +26,8 @@ always @(*) begin
     is_branch = 0;
 
     case(opcode)
-        `ARITHMETIC:
-        `ARITHMETIC_IMM: begin
-            case(func3)
+        `ARITHMETIC, `ARITHMETIC_IMM: begin
+            case(funct3)
                 `FUNCT3_ADD: begin     // `FUNCT3_ADD == `FUNCT3_SUB == 3'b000
                     if(funct7) atype = `FUNC_SUB;
                     else atype = `FUNC_ADD;
@@ -49,11 +48,12 @@ always @(*) begin
                     if(funct7) atype = `FUNC_ARS;
                     else atype = `FUNC_LRS;
                 end
+                default: begin
+                    atype = 4'b0;
+                end
             endcase
         end
-        `LOAD:
-        `STORE:
-        `JALR: begin
+        `LOAD, `STORE, `JALR: begin
             atype = `FUNC_ADD;
         end
         `BRANCH: begin
@@ -63,14 +63,17 @@ always @(*) begin
                 `FUNCT3_BEQ: begin
                     btype = `BRANCH_EQ;
                 end
-                `FUNCT3_BNE begin
+                `FUNCT3_BNE: begin
                     btype = `BRANCH_NE;
                 end
-                `FUNCT3_BLT begin
+                `FUNCT3_BLT: begin
                     btype = `BRANCH_LT;
                 end
-                `FUNCT3_BGE begin
+                `FUNCT3_BGE: begin
                     btype = `BRANCH_GE;
+                end
+                default: begin
+                    btype = 2'b0;
                 end
             endcase
         end
@@ -81,7 +84,10 @@ always @(*) begin
         // end
         `ECALL: begin
         end
-
+        default: begin
+            atype = 4'b0;
+            btype = 2'b0;
+        end
     endcase
 end
 

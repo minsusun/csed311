@@ -41,7 +41,7 @@ module register_file(
 		end
 		else begin
 			if (write_enable)
-				rf[rd] = rd_din;
+				rf[rd] <= rd_din;
 		end
 	end
 endmodule
