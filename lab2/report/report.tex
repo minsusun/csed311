@@ -82,6 +82,8 @@ end
     \caption{pc.v}
 \end{figure}
 
+Program Counter는 주어진 clk에 따라서 current_pc를 next_pc로 업데이트하는 Synchronous 모듈로 구현되었다.
+
 \subsection{Next Program Counter Logic}
 
 \begin{figure}[h]
@@ -99,6 +101,8 @@ end
     \end{minted}
     \caption{next_pc_logic.v}
 \end{figure}
+
+Next Program Counter Logic은 주어진 is_jalr, branch, alu_bcond, is_jal 신호에 따라서 다음 Program Counter 값을 Asynchronous하게 산출하는 모듈이다.
 
 \subsection{Control Unit}
 
@@ -122,7 +126,7 @@ end
     \caption{control_unit.v}
 \end{figure}
 
-\newpage
+Control Unit은 주어진 instruction에서 opcode에 따라 필요한 Control Value를 계산하여 산출하는 Asynchronous 모듈이다.
 
 \subsection{ALU Control Unit}
 
@@ -134,6 +138,8 @@ end
     \end{minted}
     \caption{alu_ctrl_unit.v}
 \end{figure}
+
+ALU Control Unit은 주어진 funct3, funct7, opcode를 합쳐 alu_op 신호를 통해 ALU에 전달하는 Asynchronous 모듈이다.
 
 \subsection{Immediate Generator}
 
@@ -155,6 +161,8 @@ end
     \caption{imm_gen.v}
 \end{figure}
 
+Immediate Generator는 주어진 instruction의 opcode에 따라서 immediate value를 추출하는 Asynchronous 모듈이다. Immediate value가 필요하지 않을 경우 32'b0으로 출력한다.
+
 \subsection{Register File}
 
 \begin{figure}[h]
@@ -173,6 +181,8 @@ end
     \end{minted}
     \caption{register_file.v}
 \end{figure}
+
+Register File은 주어진 rs1, rs2에 따라 해당 레지스터의 값을 Asynchronous하게 출력하고, clk에 맞추어 rd에 해당하는 레지스터에 din 값을 Synchronous하게 쓴다. x0의 경우에는 rs1과 rs2 신호를 읽는 과정에서 해당 경우를 검출하고, 0을 출력하도록 구현하였다.
 
 \newpage
 
@@ -270,6 +280,8 @@ end
     \caption{alu.v}
 \end{figure}
 
+ALU는 주어진 opcode, funct3, funct7과 alu_in_1, alu_in_2에 따라 연산 결과값을 계산하는 Asynchronous 모듈로 구현하였다. 주어진 instruction 이외에는 alu_result와 alu_bcond를 0으로 처리하였다.
+
 \subsection{Instruction/Data Memory}
 
 \begin{figure}[!h]
@@ -290,10 +302,10 @@ end
     // Synchronously write data to the memory
     // (use dmem_addr to access memory)
     always @(*) begin
-    if(mem_read)
-        dout = mem[dmem_addr];
-    else
-        dout = 32'b0;
+        if(mem_read)
+            dout = mem[dmem_addr];
+        else
+            dout = 32'b0;
     end
     always @(posedge clk) begin
         if(mem_write) begin
@@ -303,6 +315,8 @@ end
     \end{minted}
     \caption{data_memory.v}
 \end{figure}
+
+Instruction Memory와 Data Memory 모두 Memory의 기능을 하므로, 비슷한 구현을 가진다. Data Read의 경우에는 두 모듈 모두 동일하게 Asynchronous한 구현을 가지며, Data Write이 가능한 Data Memory의 경우 mem_write 신호에 따라서 din의 값을 address 위치의 메모리에 저장하는 Synchronous한 로직을 구현했다. Data Read의 경우에는 Asynchronous하지만, Control Value인 mem_read 신호가 유효한 경우에 대해서만 값이 출력되도록 구현되었다.
 
 \subsection{CPU}
 
@@ -354,6 +368,10 @@ end
     \caption{cpu.v}
 \end{figure}
 
+CPU 모듈은 위의 다른 모듈들을 이어주는 top module의 역할을 하도록 구현하였다. Design에서 제시하였던 Data Path에서의 멀티플렉서 등의 세부적인 Control Value 결정을 할 수 있도록 와이어링하였다.
+
+과제의 요구 조건에 따라서 주어진 instruction이 ECALL이고, x17 레지스터의 값이 10인 경우에 is_halted 신호를 이용해 프로그램을 종료하도록 구현하였다. 모듈화의 장점을 최대한 이용하기 위해, is_ecall을 통해서 ECALL Instruction을 검출한 이후, ECALL인 경우 rs1 값을 instruction의 값과는 상관없이 x17을 가르키도록 한 후, 추후 rs1_dout의 값에서 10을 확인하여 종료 조건을 판단한다. 이외에는 제시된대로 NOP와 같이 아무것도 수행하지 않도록 구현하였다.
+
 \section{Discussion}
 이번 과제에서 구현한 Single Cycle CPU의 세부 모듈들과 각각의 모듈의 Clock Synchronous/Asynchronous 여부는 아래와 같다.
 
@@ -371,6 +389,8 @@ end
     \item Register File(Register Read): Asynchronous
     \item Register File(Register Write, Initializing, Reset): Synchronous
 \end{itemize}
+
+추가로 구현한 LUI, AUIPC Instruction은 Design에서 언급한 전체 Data Path에서의 ALUSrc_1을 통해서 제어되도록 구현하였다. 2bit로 이루어진 ALUSrc_1이 1x이라면 LUI Instruction을 위해서 ALU의 첫 피연산자에 0을 입력하도록 하고, 00인 경우에는 AUIPC를 위하여 Program Counter의 값을 입력하도록, 01의 경우 일반적인 ALU의 역할을 수행하도록 두 개의 입력을 인가한다.
 
 
 \section{Conclusion}
