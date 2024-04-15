@@ -19,7 +19,7 @@ always @(*) begin
                         `FUNCT3_SLL: alu_op_o = `ALU_SLL;
                         `FUNCT3_SRL: alu_op_o = `ALU_SLR;
                         `FUNCT3_AND: alu_op_o = `ALU_AND;
-                        `FUNCT3_OR: alu_op_o = `ALU_OR;
+                        `FUNCT3_OR:  alu_op_o = `ALU_OR;
                         `FUNCT3_XOR: alu_op_o = `ALU_XOR;
                         default: alu_op_o = 4'b0;
                     endcase
@@ -30,8 +30,17 @@ always @(*) begin
                         `FUNCT3_SLL: alu_op_o = `ALU_SLL;
                         `FUNCT3_SRL: alu_op_o = `ALU_SLR;
                         `FUNCT3_AND: alu_op_o = `ALU_AND;
-                        `FUNCT3_OR: alu_op_o = `ALU_OR;
+                        `FUNCT3_OR:  alu_op_o = `ALU_OR;
                         `FUNCT3_XOR: alu_op_o = `ALU_XOR;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `BRANCH: begin
+                    case(instruction[14:12])
+                        `FUCNT3_BEQ: alu_op_o = `ALU_BEQ;
+                        `FUNCT3_BNE: alu_op_o = `ALU_BNE;
+                        `FUCNT3_BLT: alu_op_o = `ALU_BLT;
+                        `FUNCT3_BGE: alu_op_o = `ALU_BGE;
                         default: alu_op_o = 4'b0;
                     endcase
                 end

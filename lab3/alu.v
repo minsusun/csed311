@@ -39,7 +39,7 @@ always @(*) begin
             bcond = 0;
         end
         `ALU_BEQ: begin
-            alu_p_o = 0;
+            alu_p_o = 32'b0;
             bcond = alu_a_i == alu_b_i;
         end
         `ALU_BNE: begin
