@@ -1,4 +1,3 @@
-`include "alu_func.v"
 `include "opcodes.v"
 
 module alu_control(

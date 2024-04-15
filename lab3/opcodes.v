@@ -41,3 +41,16 @@
 // FUNCT7
 `define FUNCT7_SUB      7'b0100000
 `define FUNCT7_OTHERS   7'b0000000
+
+// ALU
+`define ALU_ADD 4'b0000
+`define ALU_SUB 4'b0001
+`define ALU_AND 4'b0010
+`define ALU_OR  4'b0011
+`define ALU_XOR 4'b0100
+`define ALU_SLL 4'b0101
+`define ALU_SLR 4'b0110
+`define ALU_BEQ 4'b0111
+`define ALU_BNE 4'b1000
+`define ALU_BLT 4'b1001
+`define ALU_BGE 4'b1010
