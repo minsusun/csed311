@@ -1,73 +1,64 @@
-`include "ALUControlSignals.v"
+`include "opcodes.v"
 
 module ALU(
-    input [3:0] alu_ctrl,
-    input [31:0] alu_in_a,
-    input [31:0] alu_in_b,
-    output reg [31:0] alu_result,
-    output reg alu_bcond
+    input [3:0] alu_op_i,
+    input [31:0] alu_a_i,
+    input [31:0] alu_b_i,
+    output reg [31:0] alu_p_o,
+    output reg bcond
 );
-    always @(*) begin
-        case(alu_ctrl)
-        `ADD: begin
-            alu_result = alu_in_a + alu_in_b;
-            alu_bcond = 1'b0;
-        end
 
-        `SUB: begin
-            alu_result = alu_in_a - alu_in_b;
-            alu_bcond = 1'b0;
+always @(*) begin
+    case(alu_op_i)
+        `ALU_ADD: begin
+            alu_p_o = alu_a_i + alu_b_i;
+            bcond = 0;
         end
-
-        `SLL: begin
-            alu_result = alu_in_a << alu_in_b;
-            alu_bcond = 1'b0;
+        `ALU_SUB: begin
+            alu_p_o = alu_a_i - alu_b_i;
+            bcond = 0;
         end
-
-        `SRL: begin
-            alu_result = alu_in_a >> alu_in_b;
-            alu_bcond = 1'b0;
+        `ALU_AND: begin
+            alu_p_o = alu_a_i & alu_b_i;
+            bcond = 0;
         end
-
-        `AND: begin
-            alu_result = alu_in_a & alu_in_b;
-            alu_bcond = 1'b0;
+        `ALU_OR: begin
+            alu_p_o = alu_a_i | alu_b_i;
+            bcond = 0;
         end
-
-        `OR : begin
-            alu_result = alu_in_a | alu_in_b;
-            alu_bcond = 1'b0;
+        `ALU_XOR: begin
+            alu_p_o = alu_a_i ^ alu_b_i;
+            bcond = 0;
         end
-
-        `XOR: begin
-            alu_result = alu_in_a ^ alu_in_b;
-            alu_bcond = 1'b0;
+        `ALU_SLL: begin
+            alu_p_o = alu_a_i << alu_b_i;
+            bcond = 0;
         end
-
-        `CEQ: begin
-            alu_result = 0;
-            alu_bcond = (alu_in_a == alu_in_b);
+        `ALU_SLR: begin
+            alu_p_o = alu_a_i >> alu_b_i;
+            bcond = 0;
         end
-
-        `CNE: begin
-            alu_result = 0;
-            alu_bcond = (alu_in_a != alu_in_b);
+        `ALU_BEQ: begin
+            alu_p_o = 32'b0;
+            bcond = alu_a_i == alu_b_i;
         end
-
-        `CLT: begin
-            alu_result = 0;
-            alu_bcond = (alu_in_a < alu_in_b);
+        `ALU_BNE: begin
+            alu_p_o = 32'b0;
+            bcond = alu_a_i != alu_b_i;
         end
-
-        `CGE: begin
-            alu_result = 0;
-            alu_bcond = (alu_in_a >= alu_in_b);
+        `ALU_BLT: begin
+            alu_p_o = 32'b0;
+            bcond = alu_a_i < alu_b_i;
         end
-
+        `ALU_BGE: begin
+            alu_p_o = 32'b0;
+            bcond = alu_a_i >= alu_b_i;
+        end
         default: begin
-            alu_result = 0;
-            alu_bcond = 0;
+            alu_p_o = 32'b0;
+            bcond = 0;
         end
-        endcase
-    end
+    endcase
+end
+
 endmodule

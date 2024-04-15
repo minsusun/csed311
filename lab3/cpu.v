@@ -1,5 +1,3 @@
-// TODO: Make 'ecall detecting unit'.
-
 // Submit this file with other files you created.
 // Do not touch port declarations of the module 'CPU'.
 
@@ -48,7 +46,7 @@ module cpu(
     wire is_ecall;
 
     /***** Register declarations *****/
-    reg [31:0] IR/*verilator public*/; // instruction register
+    reg [31:0] IR; // instruction register
     reg [31:0] MDR; // memory data register
     reg [31:0] A; // Read 1 data register
     reg [31:0] B; // Read 2 data register
@@ -57,9 +55,9 @@ module cpu(
 
     /***** Combinational logics *****/
     assign pc_update = (pc_write_cond && alu_bcond) || pc_write;
-    assign rd_din = (reg_src[1]) ? current_pc : ((reg_src[0]) ? ALUOut : MDR);
+    assign rd_din = (reg_src[1]) ? current_pc : ((reg_src[0]) ? MDR : ALUOut);
     assign addr = i_or_d ? ALUOut : current_pc;
-    assign alu_in_a = alu_src_a ? current_pc : A;
+    assign alu_in_a = alu_src_a ? A : current_pc;
     assign next_pc = pc_src ? ALUOut : alu_result;
 
     assign alu_in_b = 
@@ -150,20 +148,18 @@ module cpu(
     );
 
     // ---------- ALU Control Unit ----------
-    ALUControlUnit alu_ctrl_unit(
-        .opcode(IR[6:0]),
-        .funct3(IR[14:12]),
-        .funct7(IR[31:25]),
-        .alu_op(alu_op),
-        .alu_ctrl(alu_ctrl)
+    ALUControl alu_ctrl_unit(
+        .instruction(IR),
+        .aluOp(alu_op),
+        .alu_op_o(alu_ctrl)
     );
 
     // ---------- ALU ----------
     ALU alu(
-        .alu_ctrl(alu_ctrl),
-        .alu_in_a(alu_in_a),
-        .alu_in_b(alu_in_b),
-        .alu_result(alu_result),
-        .alu_bcond(alu_bcond)
+        .alu_op_i(alu_ctrl),
+        .alu_a_i(alu_in_a),
+        .alu_b_i(alu_in_b),
+        .alu_p_o(alu_result),
+        .bcond(alu_bcond)
     );
 endmodule

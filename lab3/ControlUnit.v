@@ -82,6 +82,7 @@ module ControlUnit(
         `MW:     next_state = `IF;
         `AC:     next_state = `IF;
         `MRC:    next_state = `IF;
+        `ED:     next_state = `IF;
         default: next_state = state;
         endcase
     end
