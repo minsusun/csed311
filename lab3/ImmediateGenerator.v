@@ -37,6 +37,7 @@ module ImmediateGenerator(
             };
         end
 
+        `JALR  : immediate = {{20{inst[31]}}, inst[31:20]};
         `LUI   : immediate = {inst[31:12], 12'b0};
         `AUIPC : immediate = {inst[31:12], 12'b0};
         default: immediate = {32{1'b0}};

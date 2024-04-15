@@ -13,6 +13,10 @@ module cpu(
     input clk, // clock signal
     output is_halted, // Whether to finish simulation
     output [31:0] print_reg[0:31]
+    // DEBUG
+    , output [31:0] print_pc
+    , output [31:0] print_mem[0:9]
+    // DEBUG
 );
     /***** Wire declarations *****/
     wire pc_update;
@@ -36,7 +40,7 @@ module cpu(
     wire i_or_d;
     wire mem_read;
     wire mem_write;
-    wire [1:0] reg_src;
+    wire reg_src;
     wire ir_write;
     wire pc_src;
     wire [1:0] alu_op;
@@ -44,6 +48,10 @@ module cpu(
     wire [1:0] alu_src_b;
     wire reg_write;
     wire is_ecall;
+
+    // DEBUG
+    assign print_pc = current_pc;
+    // DEBUG
 
     /***** Register declarations *****/
     reg [31:0] IR; // instruction register
@@ -55,7 +63,7 @@ module cpu(
 
     /***** Combinational logics *****/
     assign pc_update = (pc_write_cond && alu_bcond) || pc_write;
-    assign rd_din = (reg_src[1]) ? current_pc : ((reg_src[0]) ? MDR : ALUOut);
+    assign rd_din = reg_src ? MDR : ALUOut;
     assign addr = i_or_d ? ALUOut : current_pc;
     assign alu_in_a = alu_src_a ? A : current_pc;
     assign next_pc = pc_src ? ALUOut : alu_result;
@@ -119,6 +127,9 @@ module cpu(
         .mem_read(mem_read),
         .mem_write(mem_write),
         .dout(mem_dout)
+        // DEBUG
+        , .print_mem(print_mem)
+        // DEBUG
     );
 
     // ---------- Control Unit ----------

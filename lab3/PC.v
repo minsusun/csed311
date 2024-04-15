@@ -10,7 +10,5 @@ module PC(
             current_pc <= 0;
         else if(pc_update) 
             current_pc <= next_pc;
-        else 
-            current_pc <= current_pc;
     end
 endmodule

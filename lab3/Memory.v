@@ -6,6 +6,9 @@ module Memory #(parameter MEM_DEPTH = 16384) (
     input mem_read,       // is read signal driven?
     input mem_write,      // is write signal driven?
     output reg [31:0] dout    // output of the data memory at addr
+    // DEBUG
+    , output reg [31:0] print_mem[0:9]
+    // DEBUG
 );  
     integer i;
 
@@ -19,6 +22,10 @@ module Memory #(parameter MEM_DEPTH = 16384) (
     // Asynchrnously read data from the memory
     assign dout = (mem_read) ? mem[mem_addr] : 32'b0;
 
+    // DEBUG
+    assign print_mem = mem[3063:3072];
+    // DEBUG
+
     always @(posedge clk) begin
         // Initialize data memory (do not touch)
         if (reset) begin
@@ -29,7 +36,7 @@ module Memory #(parameter MEM_DEPTH = 16384) (
                 /* verilator lint_on BLKSEQ */
                 // DO NOT TOUCH COMMENT ABOVE
             // Provide path of the file including instructions with binary format
-            $readmemh("student_tb/basic_mem.txt", mem);
+            $readmemh("student_tb/ifelse_mem.txt", mem);
         end
 
         // Synchronously write data to the memory

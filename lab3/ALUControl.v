@@ -46,6 +46,7 @@ always @(*) begin
                 `LOAD: alu_op_o = `ALU_ADD;
                 `STORE: alu_op_o = `ALU_ADD;
                 `JAL: alu_op_o = `ALU_ADD;
+                `JALR: alu_op_o = `ALU_ADD;
                 `ECALL: alu_op_o = `ALU_BEQ;
                 default: alu_op_o = 4'b0;
             endcase
