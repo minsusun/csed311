@@ -1,3 +1,5 @@
+// TODO: Make 'ecall detecting unit'.
+
 // Submit this file with other files you created.
 // Do not touch port declarations of the module 'CPU'.
 
@@ -8,89 +10,160 @@
 // 3. You might need to describe combinational logics to drive them into the module (e.g., mux, and, or, ...)
 // 4. `include files if required
 
-module cpu(input reset,       // positive reset signal
-           input clk,         // clock signal
-           output is_halted,
-           output [31:0]print_reg[0:31]
-           ); // Whehther to finish simulation
-  /***** Wire declarations *****/
+module cpu(
+    input reset, // positive reset signal
+    input clk, // clock signal
+    output is_halted, // Whether to finish simulation
+    output [31:0] print_reg[0:31]
+);
+    /***** Wire declarations *****/
+    wire pc_update;
+    wire [31:0] next_pc;
+    wire [31:0] current_pc;
+    wire [31:0] rd_din;
+    wire [31:0] rs1_dout;
+    wire [31:0] rs2_dout;
+    wire [31:0] addr;
+    wire [31:0] mem_dout;
+    wire [31:0] immediate;
+    wire [31:0] alu_in_a;
+    wire [31:0] alu_in_b;
+    wire [31:0] alu_result;
+    wire alu_bcond;
+    wire [3:0] alu_ctrl;
+    wire [4:0] rs1;
 
-  /***** Register declarations *****/
-  reg [31:0] IR; // instruction register
-  reg [31:0] MDR; // memory data register
-  reg [31:0] A; // Read 1 data register
-  reg [31:0] B; // Read 2 data register
-  reg [31:0] ALUOut; // ALU output register
-  // Do not modify and use registers declared above.
+    wire pc_write_cond;
+    wire pc_write;
+    wire i_or_d;
+    wire mem_read;
+    wire mem_write;
+    wire [1:0] reg_src;
+    wire ir_write;
+    wire pc_src;
+    wire [1:0] alu_op;
+    wire alu_src_a;
+    wire [1:0] alu_src_b;
+    wire reg_write;
+    wire is_ecall;
 
-  // ---------- Update program counter ----------
-  // PC must be updated on the rising edge (positive edge) of the clock.
-  PC pc(
-    .reset(),       // input (Use reset to initialize PC. Initial value must be 0)
-    .clk(),         // input
-    .next_pc(),     // input
-    .current_pc()   // output
-  );
+    /***** Register declarations *****/
+    reg [31:0] IR/*verilator public*/; // instruction register
+    reg [31:0] MDR; // memory data register
+    reg [31:0] A; // Read 1 data register
+    reg [31:0] B; // Read 2 data register
+    reg [31:0] ALUOut; // ALU output register
+    // Do not modify and use registers declared above.
 
-  // ---------- Register File ----------
-  RegisterFile reg_file(
-    .reset(),        // input
-    .clk(),          // input
-    .rs1(),          // input
-    .rs2(),          // input
-    .rd(),           // input
-    .rd_din(),       // input
-    .write_enable(),    // input
-    .rs1_dout(),     // output
-    .rs2_dout(),      // output
-    .print_reg()     // output (TO PRINT REGISTER VALUES IN TESTBENCH)
-  );
+    /***** Combinational logics *****/
+    assign pc_update = (pc_write_cond && alu_bcond) || pc_write;
+    assign rd_din = (reg_src[1]) ? current_pc : ((reg_src[0]) ? ALUOut : MDR);
+    assign addr = i_or_d ? ALUOut : current_pc;
+    assign alu_in_a = alu_src_a ? current_pc : A;
+    assign next_pc = pc_src ? ALUOut : alu_result;
 
-  // ---------- Memory ----------
-  Memory memory(
-    .reset(),        // input
-    .clk(),          // input
-    .addr(),         // input
-    .din(),          // input
-    .mem_read(),     // input
-    .mem_write(),    // input
-    .dout()          // output
-  );
+    assign alu_in_b = 
+        (alu_src_b[1]) ? 
+        ((alu_src_b[0]) ? 10 : immediate) : 
+        ((alu_src_b[0]) ? 4 : B);
+    
+    assign rs1 = (is_ecall) ? 17 : IR[19:15];
+    assign is_halted = is_ecall && alu_bcond;
 
-  // ---------- Control Unit ----------
-  ControlUnit ctrl_unit(
-    .part_of_inst(),  // input
-    .is_jal(),        // output
-    .is_jalr(),       // output
-    .branch(),        // output
-    .mem_read(),      // output
-    .mem_to_reg(),    // output
-    .mem_write(),     // output
-    .alu_src(),       // output
-    .write_enable(),     // output
-    .pc_to_reg(),     // output
-    .is_ecall()       // output (ecall inst)
-  );
+    /***** Register update sequential logics *****/
+    always @(posedge clk) begin
+        if(reset) begin
+            IR <= 32'b0;
+            MDR <= 32'b0;
+            A <= 32'b0;
+            B <= 32'b0;
+            ALUOut <= 32'b0;
+        end else begin
+            if(ir_write)
+                IR <= mem_dout;
+            MDR <= mem_dout;
+            A <= rs1_dout;
+            B <= rs2_dout;
+            ALUOut <= alu_result;
+        end
+    end
 
-  // ---------- Immediate Generator ----------
-  ImmediateGenerator imm_gen(
-    .part_of_inst(),  // input
-    .imm_gen_out()    // output
-  );
+    // ---------- Update program counter ----------
+    // PC must be updated on the rising edge (positive edge) of the clock.
+    PC pc(
+        .reset(reset),
+        .clk(clk),
+        .pc_update(pc_update),
+        .next_pc(next_pc),
+        .current_pc(current_pc)
+    );
 
-  // ---------- ALU Control Unit ----------
-  ALUControlUnit alu_ctrl_unit(
-    .part_of_inst(),  // input
-    .alu_op()         // output
-  );
+    // ---------- Register File ----------
+    RegisterFile reg_file(
+        .reset(reset),  
+        .clk(clk),       
+        .rs1(rs1),
+        .rs2(IR[24:20]),
+        .rd(IR[11:7]),   
+        .rd_din(rd_din), 
+        .reg_write(reg_write), 
+        .rs1_dout(rs1_dout), 
+        .rs2_dout(rs2_dout), 
+        .print_reg(print_reg) 
+    );
 
-  // ---------- ALU ----------
-  ALU alu(
-    .alu_op(),      // input
-    .alu_in_1(),    // input  
-    .alu_in_2(),    // input
-    .alu_result(),  // output
-    .alu_bcond()     // output
-  );
+    // ---------- Memory ----------
+    Memory memory(
+        .reset(reset),
+        .clk(clk),
+        .addr(addr),
+        .din(B),
+        .mem_read(mem_read),
+        .mem_write(mem_write),
+        .dout(mem_dout)
+    );
 
+    // ---------- Control Unit ----------
+    ControlUnit ctrl_unit(
+        .part_of_inst(IR[6:0]),  // input
+        .clk(clk),
+        .reset(reset),
+        .pc_write_cond(pc_write_cond),
+        .pc_write(pc_write),
+        .i_or_d(i_or_d),
+        .mem_read(mem_read),
+        .mem_write(mem_write),
+        .reg_src(reg_src),
+        .ir_write(ir_write),
+        .pc_src(pc_src),
+        .alu_op(alu_op),
+        .alu_src_a(alu_src_a),
+        .alu_src_b(alu_src_b),
+        .reg_write(reg_write),
+        .is_ecall(is_ecall)
+    );
+
+    // ---------- Immediate Generator ----------
+    ImmediateGenerator imm_gen(
+        .inst(IR),
+        .immediate(immediate)
+    );
+
+    // ---------- ALU Control Unit ----------
+    ALUControlUnit alu_ctrl_unit(
+        .opcode(IR[6:0]),
+        .funct3(IR[14:12]),
+        .funct7(IR[31:25]),
+        .alu_op(alu_op),
+        .alu_ctrl(alu_ctrl)
+    );
+
+    // ---------- ALU ----------
+    ALU alu(
+        .alu_ctrl(alu_ctrl),
+        .alu_in_a(alu_in_a),
+        .alu_in_b(alu_in_b),
+        .alu_result(alu_result),
+        .alu_bcond(alu_bcond)
+    );
 endmodule

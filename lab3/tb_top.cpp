@@ -1,99 +1,67 @@
-// Title       : tb_top.cpp
-// Author      : Minsu Gong (gongms@postech.ac.kr)
-
 #include <verilated.h>
-#include <verilated_vcd_c.h>
 
 #include <iostream>
+#include <memory>
+#include <string>
 #include <fstream>
 #include <iomanip>
-#include <stdlib.h>
-#include <string>
-using namespace std;
-#include "Vtop.h"
 
-#define MAX_SIM_TIME 10000
-int sim_time = 0;
+#include "Vtop.h"
+#include "test/test.h"
+
+const unsigned int MAX_SIM_TIME = 10000;
 int total_cycle = 0;
 
-void next_cycle(Vtop* dut, VerilatedVcdC* m_trace) {
-    dut->clk ^= 1;
-    dut->eval();
-    m_trace->dump(sim_time++);
-    dut->clk ^= 1;
-    dut->eval();
-    m_trace->dump(sim_time++);
-    total_cycle++;
+void print_pvs(const std::unique_ptr<Vtop>& cp) {
+    using std::cout;
+    using std::endl;
+    using std::setw;
+    using std::setfill;
+    using std::string;
+    using std::stringstream;
+    using std::hex;
+    using std::bitset;
+    using std::left;
+
+    string reg_hex;
+    stringstream reg_value;
+
+    cout << "Cycle: " << total_cycle << endl;
+    cout << left << setw(8) << "is_halted: " << bitset<1>(cp->is_halted) << endl;
+    cout << left << setw(8) << "Register outputs" << endl;
+    for(int i = 0; i < 32; i++) {
+        reg_value << setw(8) << setfill('0') << hex << cp->print_reg[i];
+        reg_hex = reg_value.str();
+        reg_value.str("");
+
+        cout << setw(2) << i << " " << reg_hex << endl;;
+    }
+
+    return;
 }
 
 int main(int argc, char** argv, char** env) {
-    // TO DO : CHANGE "filename" TO PROVIDED "answer_*.txt" PATH
-    string filename = "path_to_answer_*.txt";
-    ifstream file(filename);
-    stringstream ss;
-    string reg_hex;
+    using std::string;
+    using std::unique_ptr;
+    using std::cin;
 
     Verilated::commandArgs(argc, argv);
-    Vtop* dut = new Vtop;
+    const unique_ptr<Vtop> cp{new Vtop};
 
-    Verilated::traceEverOn(true);
-    VerilatedVcdC* m_trace = new VerilatedVcdC;
-    dut->trace(m_trace, 999);
-    m_trace->open("waveform.vcd");
+    cp->clk = 1;
+    cp->reset = 1;
+    next_cycle<Vtop>(cp);
+    cp->reset = 0;
 
-    dut->clk = 0;
-    dut->reset = 0;
-    dut->is_halted = 0;
-    dut->eval();
-    m_trace->dump(sim_time++);
+    while(total_cycle < MAX_SIM_TIME) {
+        next_cycle<Vtop>(cp);
+        total_cycle++;
+        print_pvs(cp);
+        cin.get();
 
-    dut->reset = 1;
-    dut->eval();
-    m_trace->dump(sim_time++);
-    
-    dut->clk = 1;
-    dut->eval();
-    m_trace->dump(sim_time++);
-    total_cycle++;
-
-    dut->reset = 0;
-    dut->eval();
-    m_trace->dump(sim_time++);
-
-    while (sim_time < MAX_SIM_TIME) {
-        next_cycle(dut, m_trace);
-        if (dut->is_halted == 1) break;
+        if(cp->is_halted == 1)
+            break;
     }
 
-    int answer_cycle;
-    string answer_reg;
-    int correct_count = 0;
-    file >> answer_cycle;
-
-    cout << "TEST END" << endl;
-    cout << "SIM TIME : " << sim_time << endl;
-    cout << "TOTAL CYCLE : " << total_cycle << " (Answer : " << answer_cycle << ")" << endl;
-    cout << "FINAL REGISTER OUTPUT" << endl;
-    for (int i = 0; i < 32; i = i + 1) {
-        ss << setw(8) << setfill('0') << hex << dut->print_reg[i];
-        reg_hex = ss.str();
-        ss.str("");
-
-        file >> answer_reg;
-        cout << setw(2) << i << " " << reg_hex;
-
-        if (reg_hex == answer_reg) {
-            cout << endl;
-            correct_count++;
-        }
-        else {
-            cout << " (Wrong)" << endl;
-        }
-    }
-    cout << "Correct output : " << correct_count << "/32" << endl;
-
-    m_trace->close();
-    file.close();
-    delete dut;
-    exit(0);
+    return 0;
 }
