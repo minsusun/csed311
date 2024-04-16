@@ -272,14 +272,65 @@ ALU를 재사용할 수 있게 한다.
 \subsection{ALUControl}
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
-
-        (여기에 코드를 넣어주세요...)
-
+```
+always @(*) begin
+    case(aluOp)
+        2'b00: alu_op_o = `ALU_ADD;
+        2'b01: alu_op_o = `ALU_SUB;
+        default: begin
+            case(instruction[6:0])
+                `ARITHMETIC: begin
+                    case(instruction[14:12])
+                        `FUNCT3_ADD: alu_op_o = (instruction[30]) ? `ALU_SUB : `ALU_ADD;
+                        `FUNCT3_SLL: alu_op_o = `ALU_SLL;
+                        `FUNCT3_SRL: alu_op_o = `ALU_SLR;
+                        `FUNCT3_AND: alu_op_o = `ALU_AND;
+                        `FUNCT3_OR:  alu_op_o = `ALU_OR;
+                        `FUNCT3_XOR: alu_op_o = `ALU_XOR;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `ARITHMETIC_IMM: begin
+                    case(instruction[14:12])
+                        `FUNCT3_ADD: alu_op_o = `ALU_ADD;
+                        `FUNCT3_SLL: alu_op_o = `ALU_SLL;
+                        `FUNCT3_SRL: alu_op_o = `ALU_SLR;
+                        `FUNCT3_AND: alu_op_o = `ALU_AND;
+                        `FUNCT3_OR:  alu_op_o = `ALU_OR;
+                        `FUNCT3_XOR: alu_op_o = `ALU_XOR;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `BRANCH: begin
+                    case(instruction[14:12])
+                        `FUNCT3_BEQ: alu_op_o = `ALU_BEQ;
+                        `FUNCT3_BNE: alu_op_o = `ALU_BNE;
+                        `FUNCT3_BLT: alu_op_o = `ALU_BLT;
+                        `FUNCT3_BGE: alu_op_o = `ALU_BGE;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `LOAD: alu_op_o = `ALU_ADD;
+                `STORE: alu_op_o = `ALU_ADD;
+                `JAL: alu_op_o = `ALU_ADD;
+                `JALR: alu_op_o = `ALU_ADD;
+                `ECALL: alu_op_o = `ALU_BEQ;
+                default: alu_op_o = 4'b0;
+            endcase
+        end
+    endcase
+end
+```
     \end{minted}
-    \caption{ControlUnit.v}
+    \caption{ALUControl.v}
 \end{longlisting}
 
-(이 부분 채워주시면 됩니다.)
+ALU에게 \code{alu_op_o}로 control signal을 넘겨주는 ALUControl은 주어진 \code{aluOp}에 따라서 필요한 control signal을 생성한다.
+\code{2'b00}은 \code{ALU_ADD}를, \code{2'b01}은 \code{ALU_SUB}를 ALU에게 넘겨준다.
+이외의 \code{aluOp}는 주어진 instruction의 FUCNT3, FUNCT7에 의해서 \code{alu_op_o}를 결정한다.
+FUNCT7이 \code{ARITHMETIC}, \code{ARITHMETIC_IMM}, \code{BRANCH}인 경우에는 FUNCT3에 의해서 최종적인 \code{alu_op_o}가 결정된다.
+이외의 FUNCT7에 경우에는 \code{ECALL}을 제외하고는 모두 ALU에서 ADD를 수행하기 때문에, \code{alu_op_o = `ALU_ADD'}로 넘겨준다.
+\code{ECALL}의 경우에는 \code{cpu.v}에서 \code{is_halted} 조건을 검사할 때, ALU에 의한 bcond를 통해 x17 register의 값을 검사 하기 때문에, 이를 위해 \code{`ALU_BEQ'}를 통해서 조건 검사를 할 수 있도록 하였다.
 
 \section{Discussion}
 
