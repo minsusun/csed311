@@ -273,14 +273,65 @@ ALU를 재사용할 수 있게 한다.
 \subsection{ALUControl}
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
-
-        (여기에 코드를 넣어주세요...)
-
+```
+always @(*) begin
+    case(aluOp)
+        2'b00: alu_op_o = `ALU_ADD;
+        2'b01: alu_op_o = `ALU_SUB;
+        default: begin
+            case(instruction[6:0])
+                `ARITHMETIC: begin
+                    case(instruction[14:12])
+                        `FUNCT3_ADD: alu_op_o = (instruction[30]) ? `ALU_SUB : `ALU_ADD;
+                        `FUNCT3_SLL: alu_op_o = `ALU_SLL;
+                        `FUNCT3_SRL: alu_op_o = `ALU_SLR;
+                        `FUNCT3_AND: alu_op_o = `ALU_AND;
+                        `FUNCT3_OR:  alu_op_o = `ALU_OR;
+                        `FUNCT3_XOR: alu_op_o = `ALU_XOR;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `ARITHMETIC_IMM: begin
+                    case(instruction[14:12])
+                        `FUNCT3_ADD: alu_op_o = `ALU_ADD;
+                        `FUNCT3_SLL: alu_op_o = `ALU_SLL;
+                        `FUNCT3_SRL: alu_op_o = `ALU_SLR;
+                        `FUNCT3_AND: alu_op_o = `ALU_AND;
+                        `FUNCT3_OR:  alu_op_o = `ALU_OR;
+                        `FUNCT3_XOR: alu_op_o = `ALU_XOR;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `BRANCH: begin
+                    case(instruction[14:12])
+                        `FUNCT3_BEQ: alu_op_o = `ALU_BEQ;
+                        `FUNCT3_BNE: alu_op_o = `ALU_BNE;
+                        `FUNCT3_BLT: alu_op_o = `ALU_BLT;
+                        `FUNCT3_BGE: alu_op_o = `ALU_BGE;
+                        default: alu_op_o = 4'b0;
+                    endcase
+                end
+                `LOAD: alu_op_o = `ALU_ADD;
+                `STORE: alu_op_o = `ALU_ADD;
+                `JAL: alu_op_o = `ALU_ADD;
+                `JALR: alu_op_o = `ALU_ADD;
+                `ECALL: alu_op_o = `ALU_BEQ;
+                default: alu_op_o = 4'b0;
+            endcase
+        end
+    endcase
+end
+```
     \end{minted}
-    \caption{ControlUnit.v}
+    \caption{ALUControl.v}
 \end{longlisting}
 
-(이 부분 채워주시면 됩니다.)
+ALU에게 \code{alu_op_o}로 control signal을 넘겨주는 ALUControl은 주어진 \code{aluOp}에 따라서 필요한 control signal을 생성한다.
+\code{2'b00}은 \code{ALU_ADD}를, \code{2'b01}은 \code{ALU_SUB}를 ALU에게 넘겨준다.
+이외의 \code{aluOp}는 주어진 instruction의 FUCNT3, FUNCT7에 의해서 \code{alu_op_o}를 결정한다.
+FUNCT7이 \code{ARITHMETIC}, \code{ARITHMETIC_IMM}, \code{BRANCH}인 경우에는 FUNCT3에 의해서 최종적인 \code{alu_op_o}가 결정된다.
+이외의 FUNCT7에 경우에는 \code{ECALL}을 제외하고는 모두 ALU에서 ADD를 수행하기 때문에, \code{alu_op_o = `ALU_ADD'}로 넘겨준다.
+\code{ECALL}의 경우에는 \code{cpu.v}에서 \code{is_halted} 조건을 검사할 때, ALU에 의한 bcond를 통해 x17 register의 값을 검사 하기 때문에, 이를 위해 \code{`ALU_BEQ'}를 통해서 조건 검사를 할 수 있도록 하였다.
 
 \section{Discussion}
 \subsection{각 테스트벤치의 실행 cycle}
@@ -382,6 +433,10 @@ Correct output : 32/32
 cycle이다.
 
 \section{Conclusion}
-이번 과제에서는 
+
+이번에는 지난 Single Cycle CPU에서 발전한 Multi Cycle CPU를 구현하였다.
+Single Cycle과는 달리 스테이지별로 필요한 clock만큼만 소요하여, Single Cycle CPU처럼 가장 실행이 오래 걸리는 instruction에 맞춘 clock speed를 가지지 않는다는 점이 특징이다.
+Multi Cycle CPU는 Single Cycle CPU에서 FSM을 통한 flow control을 통하여 구현할 수 있었으며, total cycle에서는 증가할 수 있지만, clock frequency의 증가로 인해 결국 기존 Single Cycle CPU에서 발전한 것을 확인할 수 있었다.
+다만 Multi Cycle CPU 또한 Single Cycle CPU에서 거론되었던, 기존 instruction이 수행되는 동안 사용되지 않는 stage의 모듈들이 모두 낭비되고 있는 점을 보완하지는 못하였고, 궁극적으로 이를 개선할 수 있는 Pipelined CPU의 필요성을 확인할 수 있었다.
 
 \end{document}
