@@ -28,7 +28,7 @@ void next_cycle(Vtop* dut, VerilatedVcdC* m_trace) {
 
 int main(int argc, char** argv, char** env) {
     // TO DO : CHANGE "filename" TO PROVIDED "answer_*.txt" PATH
-    string filename = "student_tb/answer_ifelse.txt";
+    string filename = "./student_tb/answer_non-controlflow.txt";
     ifstream file(filename);
     stringstream ss;
     string reg_hex;
@@ -80,7 +80,7 @@ int main(int argc, char** argv, char** env) {
         ss.str("");
 
         file >> answer_reg;
-        cout << setw(2) << i << " " << reg_hex;
+        cout << setw(2) << i << " " << reg_hex << " (Answer : " << answer_reg << ")";
 
         if (reg_hex == answer_reg) {
             cout << endl;
