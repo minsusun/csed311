@@ -8,11 +8,23 @@
 // 3. You might need to describe combinational logics to drive them into the module (e.g., mux, and, or, ...)
 // 4. `include files if required
 
-module cpu(input reset,       // positive reset signal
-           input clk,         // clock signal
-           output is_halted, // Whehther to finish simulation
-           output [31:0]print_reg[0:31]); // Whehther to finish simulation
+module cpu(
+  input reset,                  // positive reset signal
+  input clk,                    // clock signal
+  output is_halted,             // Whehther to finish simulation
+  output [31:0] print_reg[0:31] // Whehther to finish simulation
+);
   /***** Wire declarations *****/
+  /***** PC-related wires *****/
+  wire [31:0] next_pc;
+  wire [31:0] current_pc;
+
+  /***** InstMemory-related wires *****/
+  wire [31:0] imem_dout;
+
+  /***** RegisterFile-related wires *****/
+  wire [31:0] rd_din;
+
   /***** Register declarations *****/
   // You need to modify the width of registers
   // In addition, 
@@ -20,6 +32,7 @@ module cpu(input reset,       // positive reset signal
   // 2. You might not need registers described below
   /***** IF/ID pipeline registers *****/
   reg IF_ID_inst;           // will be used in ID stage
+  
   /***** ID/EX pipeline registers *****/
   // From the control unit
   reg ID_EX_alu_op;         // will be used in EX stage
@@ -33,7 +46,7 @@ module cpu(input reset,       // positive reset signal
   reg ID_EX_rs2_data;
   reg ID_EX_imm;
   reg ID_EX_ALU_ctrl_unit_input;
-  reg ID_EX_rd;
+  reg [4:0] ID_EX_rd;
 
   /***** EX/MEM pipeline registers *****/
   // From the control unit
@@ -45,32 +58,35 @@ module cpu(input reset,       // positive reset signal
   // From others
   reg EX_MEM_alu_out;
   reg EX_MEM_dmem_data;
-  reg EX_MEM_rd;
+  reg [4:0] EX_MEM_rd;
 
   /***** MEM/WB pipeline registers *****/
   // From the control unit
   reg MEM_WB_mem_to_reg;    // will be used in WB stage
   reg MEM_WB_reg_write;     // will be used in WB stage
   // From others
-  reg MEM_WB_mem_to_reg_src_1;
-  reg MEM_WB_mem_to_reg_src_2;
+  reg MEM_WB_dmem_dout;
+  reg MEM_WB_alu_result;
+  reg [4:0] MEM_WB_rd;
+
+  /***** Combinational logics *****/
+  assign rd_din = MEM_WB_mem_to_reg ? mem_to_reg_src_1 : mem_to_reg_src_0;
 
   // ---------- Update program counter ----------
   // PC must be updated on the rising edge (positive edge) of the clock.
   PC pc(
-    .reset(reset),       // input (Use reset to initialize PC. Initial value must be 0)
-    .clk(clk),         // input
-    .pc_update(),
-    .next_pc(),     // input
-    .current_pc()   // output
+    .reset(reset),  // input (Use reset to initialize PC. Initial value must be 0)
+    .clk(clk),      // input
+    .next_pc(next_pc),     // input
+    .current_pc(current_pc)   // output
   );
   
   // ---------- Instruction Memory ----------
   InstMemory imem(
-    .reset(reset),   // input
+    .reset(reset), // input
     .clk(clk),     // input
-    .addr(),    // input
-    .dout()     // output
+    .addr(current_pc),       // input
+    .dout(imem_dout)        // output
   );
 
   // Update IF/ID pipeline registers here
@@ -83,15 +99,15 @@ module cpu(input reset,       // positive reset signal
 
   // ---------- Register File ----------
   RegisterFile reg_file (
-    .reset(reset),        // input
-    .clk(clk),          // input
-    .rs1(),          // input
-    .rs2(),          // input
-    .rd(),           // input
-    .rd_din(),       // input
+    .reset(reset),   // input
+    .clk(clk),       // input
+    .rs1(IF_ID_inst[19:15]),          // input
+    .rs2(IF_ID_inst[24:20]),          // input
+    .rd(MEM_WB_rd),           // input
+    .rd_din(rd_din),       // input
     .reg_write(),    // input
     .rs1_dout(),     // output
-    .rs2_dout(),      // output
+    .rs2_dout(),     // output
     .print_reg(print_reg)
   );
 
@@ -103,7 +119,7 @@ module cpu(input reset,       // positive reset signal
     .mem_to_reg(),    // output
     .mem_write(),     // output
     .alu_src(),       // output
-    .reg_write(),  // output
+    .reg_write(),     // output
     .alu_op(),        // output
     .is_ecall()       // output (ecall inst)
   );

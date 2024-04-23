@@ -6,7 +6,7 @@ module ControlUnit(
     output reg mem_to_reg,
     output reg mem_write,
     output reg alu_src,
-    output reg reg_write,
+    output reg write_enable,
     output reg [1:0] alu_op,
     output reg is_ecall
 );
@@ -17,7 +17,7 @@ module ControlUnit(
         mem_to_reg = (opcode == `LOAD);
         mem_write = (opcode == `STORE);
         alu_src = (opcode != `ARITHMETIC) && (opcode != `BRANCH);
-        reg_write = (opcode != `STORE) && (opcode != `BRANCH);
+        write_enable = (opcode != `STORE) && (opcode != `BRANCH);
         alu_op = {
             (opcode == `ARITHMETIC) || 
             (opcode == `ARITHMETIC_IMM) || 

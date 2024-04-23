@@ -1,8 +1,8 @@
 `include "opcodes.v"
 
 module ImmediateGenerator(
-  input [31:0] instruction,
-  output reg [31:0] immediate
+  input [31:0] part_of_inst,
+  output reg [31:0] imm_gen_out
 );
   wire [6:0] opcode = inst[6:0];
 
