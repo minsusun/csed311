@@ -83,13 +83,13 @@ module cpu(input reset,       // positive reset signal
 
   // ---------- Register File ----------
   RegisterFile reg_file (
-    .reset(),        // input
-    .clk(),          // input
+    .reset(reset),        // input
+    .clk(clk),          // input
     .rs1(),          // input
     .rs2(),          // input
     .rd(),           // input
     .rd_din(),       // input
-    .write_enable(),    // input
+    .reg_write(),    // input
     .rs1_dout(),     // output
     .rs2_dout(),      // output
     .print_reg(print_reg)
@@ -103,16 +103,15 @@ module cpu(input reset,       // positive reset signal
     .mem_to_reg(),    // output
     .mem_write(),     // output
     .alu_src(),       // output
-    .write_enable(),  // output
-    .pc_to_reg(),     // output
+    .reg_write(),  // output
     .alu_op(),        // output
     .is_ecall()       // output (ecall inst)
   );
 
   // ---------- Immediate Generator ----------
   ImmediateGenerator imm_gen(
-    .part_of_inst(),  // input
-    .imm_gen_out()    // output
+    .instruction(),  // input
+    .immediate()    // output
   );
 
   // Update ID/EX pipeline registers here
@@ -125,17 +124,18 @@ module cpu(input reset,       // positive reset signal
 
   // ---------- ALU Control Unit ----------
   ALUControlUnit alu_ctrl_unit (
-    .part_of_inst(),  // input
-    .alu_op()         // output
+    .instruction(),  // input
+    .alu_op(),        // input
+    .alu_ctrl()       // output
   );
 
   // ---------- ALU ----------
   ALU alu (
-    .alu_op(),      // input
+    .alu_ctrl(),      // input
     .alu_in_1(),    // input  
     .alu_in_2(),    // input
     .alu_result(),  // output
-    .alu_zero()     // output
+    .alu_bcond()     // output
   );
 
   // Update EX/MEM pipeline registers here

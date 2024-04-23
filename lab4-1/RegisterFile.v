@@ -4,7 +4,7 @@ module RegisterFile(input	reset,
                     input [4:0] rs2,          // source register 2
                     input [4:0] rd,           // destination register
                     input [31:0] rd_din,      // input data for rd
-                    input write_enable,       // RegWrite signal
+                    input reg_write,          // RegWrite signal
                     output [31:0] rs1_dout,   // output of rs 1
                     output [31:0] rs2_dout,
                     output [31:0] print_reg[0:31]);  // output of rs 2
@@ -18,7 +18,7 @@ module RegisterFile(input	reset,
 
   always @(clk) begin
     if (clk==0) begin // negative edge
-      if (write_enable & (rd != 0))
+      if (reg_write & (rd != 0))
         rf[rd] <= rd_din;
     end
     else begin // positive edge
