@@ -58,16 +58,17 @@ module cpu(input reset,       // positive reset signal
   // ---------- Update program counter ----------
   // PC must be updated on the rising edge (positive edge) of the clock.
   PC pc(
-    .reset(),       // input (Use reset to initialize PC. Initial value must be 0)
-    .clk(),         // input
+    .reset(reset),       // input (Use reset to initialize PC. Initial value must be 0)
+    .clk(clk),         // input
+    .pc_update(),
     .next_pc(),     // input
     .current_pc()   // output
   );
   
   // ---------- Instruction Memory ----------
   InstMemory imem(
-    .reset(),   // input
-    .clk(),     // input
+    .reset(reset),   // input
+    .clk(clk),     // input
     .addr(),    // input
     .dout()     // output
   );
@@ -82,15 +83,15 @@ module cpu(input reset,       // positive reset signal
 
   // ---------- Register File ----------
   RegisterFile reg_file (
-    .reset (),        // input
-    .clk (),          // input
-    .rs1 (),          // input
-    .rs2 (),          // input
-    .rd (),           // input
-    .rd_din (),       // input
-    .write_enable (),    // input
-    .rs1_dout (),     // output
-    .rs2_dout (),      // output
+    .reset(),        // input
+    .clk(),          // input
+    .rs1(),          // input
+    .rs2(),          // input
+    .rd(),           // input
+    .rd_din(),       // input
+    .write_enable(),    // input
+    .rs1_dout(),     // output
+    .rs2_dout(),      // output
     .print_reg(print_reg)
   );
 
@@ -147,13 +148,13 @@ module cpu(input reset,       // positive reset signal
 
   // ---------- Data Memory ----------
   DataMemory dmem(
-    .reset (),      // input
-    .clk (),        // input
-    .addr (),       // input
-    .din (),        // input
-    .mem_read (),   // input
-    .mem_write (),  // input
-    .dout ()        // output
+    .reset(),      // input
+    .clk(),        // input
+    .addr(),       // input
+    .din(),        // input
+    .mem_read(),   // input
+    .mem_write(),  // input
+    .dout()        // output
   );
 
   // Update MEM/WB pipeline registers here
@@ -163,6 +164,5 @@ module cpu(input reset,       // positive reset signal
     else begin
     end
   end
-
   
 endmodule
