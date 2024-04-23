@@ -54,6 +54,8 @@ module cpu(input reset,       // positive reset signal
   wire [ 4: 0] EX_alu_op;
   wire [31: 0] EX_alu_out;
   wire EX_alu_bcond;
+  wire [31: 0] EX_shifted_imm;
+  wire [31: 0] EX_next_pc;
 
   // MEM
   wire EX_is_branch;
@@ -65,12 +67,13 @@ module cpu(input reset,       // positive reset signal
   wire EX_mem_to_reg;
   wire EX_reg_write;
   wire [ 4: 0] EX_rd;
+  wire EX_is_ecall;
 
   /***** MEM Stage *****/
-  // WB
-  wire MEM_mem_to_reg;
   wire MEM_reg_write;
-  
+  wire MEM_mem_to_reg;
+  wire MEM_is_ecall;
+
   /***** WB Stage *****/
   wire [31: 0] WB_rdin_data;
 
@@ -94,13 +97,13 @@ module cpu(input reset,       // positive reset signal
   reg ID_EX_mem_read;       // will be used in MEM stage
   reg ID_EX_mem_to_reg;     // will be used in WB stage
   reg ID_EX_reg_write;      // will be used in WB stage
+  reg ID_EX_is_ecall;       // will be used in WB stage
   // From others
   reg [31: 0] ID_EX_rs1_data;
   reg [31: 0] ID_EX_rs2_data;
   reg [31: 0] ID_EX_imm;
   reg [31: 0] ID_EX_ALU_ctrl_unit_input;
   reg [ 4: 0] ID_EX_rd;
-  reg is_ecall;
 
   /***** EX/MEM pipeline registers *****/
   // From the control unit
@@ -110,6 +113,7 @@ module cpu(input reset,       // positive reset signal
   reg EX_MEM_alu_bcond;     // will be used in MEM stage
   reg EX_MEM_mem_to_reg;    // will be used in WB stage
   reg EX_MEM_reg_write;     // will be used in WB stage
+  reg EX_MEM_is_ecall;      // will be used in WB stage
   // From others
   reg [31: 0] EX_MEM_alu_out;
   reg [31: 0] EX_MEM_dmem_data;
@@ -119,14 +123,15 @@ module cpu(input reset,       // positive reset signal
   // From the control unit
   reg MEM_WB_mem_to_reg;    // will be used in WB stage
   reg MEM_WB_reg_write;     // will be used in WB stage
+  reg MEM_WB_is_ecall;      // will be used in WB stage
   // From others
   reg [31: 0] MEM_WB_mem_to_reg_src_1;
   reg [31: 0] MEM_WB_mem_to_reg_src_2;
+  reg [ 4: 0] MEM_WB_rd;
   reg MEM_WB_is_halt;
 
   // ---------- Update program counter ----------
   // PC must be updated on the rising edge (positive edge) of the clock.
-  assign next_pc = current_pc + 4;
   PC pc(
     .reset(reset),       // input (Use reset to initialize PC. Initial value must be 0)
     .clk(clk),         // input
@@ -159,7 +164,7 @@ module cpu(input reset,       // positive reset signal
     .rs1 (IF_ID_inst[19:15]),          // input
     .rs2 (IF_ID_inst[24: 0]),          // input
     .rd (IF_ID_inst[11: 7]),           // input
-    .rd_din (EX_rdin_data),       // input
+    .rd_din (WB_rdin_data),       // input
     .write_enable (MEM_WB_reg_write),    // input
     .rs1_dout (ID_rs1_data),     // output
     .rs2_dout (ID_rs2_data),      // output
@@ -183,7 +188,7 @@ module cpu(input reset,       // positive reset signal
   // ---------- Immediate Generator ----------
   ImmediateGenerator imm_gen(
     .part_of_inst(IF_ID_inst),  // input
-    .imm_gen_out(imm)    // output
+    .imm_gen_out(ID_imm)    // output
   );
 
   // Update ID/EX pipeline registers here
@@ -203,7 +208,7 @@ module cpu(input reset,       // positive reset signal
     end
     else begin
       ID_EX_alu_op = ID_alu_op;
-      ID_EX_alu_src = ID_mem_write;
+      ID_EX_alu_src = ID_alu_src;
       ID_EX_mem_write = ID_mem_write;
       ID_EX_mem_read = ID_mem_read;
       ID_EX_mem_to_reg = ID_mem_to_reg;
@@ -211,7 +216,7 @@ module cpu(input reset,       // positive reset signal
       ID_EX_rs1_data = ID_rs1_data;
       ID_EX_rs2_data = ID_rs2_data;
       ID_EX_imm = ID_imm;
-      ID_EX_ALU_ctrl_unit_input = IF_ID_inst;
+      ID_EX_ALU_ctrl_unit_input = ID_ALU_ctrl_unit_input;
       ID_EX_rd = ID_rd;
     end
   end
@@ -248,11 +253,11 @@ module cpu(input reset,       // positive reset signal
       EX_MEM_mem_write = EX_mem_write;
       EX_MEM_mem_read = EX_mem_read;
       EX_MEM_is_branch = EX_is_branch;
-      EX_MEM_mem_to_reg = ID_EX_mem_to_reg;
-      EX_MEM_reg_write = ID_EX_reg_write;
+      EX_MEM_mem_to_reg = EX_mem_to_reg;
+      EX_MEM_reg_write = EX_reg_write;
       EX_MEM_alu_out = EX_alu_out;
       EX_MEM_dmem_data = EX_dmem_data;
-      EX_MEM_rd = ID_EX_rd;
+      EX_MEM_rd = EX_rd;
     end
   end
 
@@ -260,11 +265,11 @@ module cpu(input reset,       // positive reset signal
   DataMemory dmem(
     .reset (reset),      // input
     .clk (clk),        // input
-    .addr (),       // input
-    .din (),        // input
-    .mem_read (),   // input
-    .mem_write (),  // input
-    .dout ()        // output
+    .addr (EX_MEM_alu_out),       // input
+    .din (EX_MEM_dmem_data),        // input
+    .mem_read (EX_MEM_mem_read),   // input
+    .mem_write (EX_MEM_mem_write),  // input
+    .dout (MEM_mem_to_reg_src_1)        // output
   );
 
   // Update MEM/WB pipeline registers here
@@ -277,11 +282,39 @@ module cpu(input reset,       // positive reset signal
       MEM_WB_is_halt = 0;
     end
     else begin
+      MEM_WB_mem_to_reg = MEM_mem_to_reg;
+      MEM_WB_reg_write = MEM_reg_write;
+      MEM_WB_mem_to_reg_src_1 = MEM_mem_to_reg_src_1;
+      MEM_WB_mem_to_reg_src_2 = MEM_mem_to_reg_src_2;
+      MEM_WB_rd = MEM_rd;
+      MEM_WB_is_halt = MEM_is_halt;
     end
   end
 
+  assign next_pc = current_pc + 4;
+  
+  assign ID_PC = IF_ID_PC;
+  assign ID_ALU_ctrl_unit_input = IF_ID_inst;
+  assign ID_rd = IF_ID_inst[11: 7];
+  
+  assign EX_reg_write = ID_EX_reg_write;
+  assign EX_mem_to_reg = ID_EX_mem_to_reg;
+  assign EX_is_branch = ID_EX_is_branch;
+  assign EX_mem_read = ID_EX_mem_read;
+  assign EX_mem_write = ID_EX_mem_write;
+  assign EX_is_ecall = ID_EX_is_ecall;
   assign EX_ALU_in_2 = (ID_EX_alu_src) ? ID_EX_imm : ID_EX_rs2_data;
+  assign EX_shifted_imm = ID_EX_imm << 2;
+  assign EX_dmem_data = ID_EX_rs2_data;
+  assign EX_rd = ID_EX_rd;
+  
+  assign MEM_reg_write = EX_MEM_reg_write;
+  assign MEM_mem_to_reg = EX_MEM_mem_to_reg;
+  assign MEM_is_ecall = EX_MEM_is_call;
   assign MEM_PCSrc = EX_MEM_is_branch & EX_MEM_alu_bcond;
+  assign MEM_mem_to_reg_src_2 = EX_MEM_alu_out;
+  assign MEM_rd = EX_MEM_rd;
+  
   assign WB_rdin_data = (MEM_WB_mem_to_reg) ? MEM_WB_mem_to_reg_src_1 : MEM_WB_mem_to_reg_src_2;
   
 endmodule
