@@ -1,6 +1,6 @@
 `include "opcodes.v"
 
-module ALUControl(
+module ALUControlUnit(
     input [1:0] aluOp,
     input [31:0] instruction,
     output reg [3:0] alu_op
@@ -53,5 +53,4 @@ always @(*) begin
         end
     endcase
 end
-
 endmodule
