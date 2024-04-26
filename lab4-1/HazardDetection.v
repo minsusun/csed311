@@ -1,11 +1,9 @@
 `include "opcodes.v"
 
 module HazardDetection (
-    input EX_reg_write,
-    input MEM_reg_write,
+    input EX_mem_read,
     input [31:0] ID_inst,
     input [4:0] EX_rd,
-    input [4:0] MEM_rd,
     output is_hazard
 );
     wire [6:0] ID_opcode = ID_inst[6:0];
@@ -23,9 +21,6 @@ module HazardDetection (
     ) && ID_rs2 != 5'b0;
 
     assign is_hazard = (
-        (ID_rs1 == EX_rd) && use_rs1 && EX_reg_write ||
-        (ID_rs1 == MEM_rd) && use_rs1 && MEM_reg_write ||
-        (ID_rs2 == EX_rd) && use_rs2 && EX_reg_write ||
-        (ID_rs2 == MEM_rd) && use_rs2 && MEM_reg_write
-    );
+        (ID_rs1 == EX_rd) && use_rs1 || (ID_rs2 == EX_rd) && use_rs2 
+    ) && EX_mem_read;
 endmodule

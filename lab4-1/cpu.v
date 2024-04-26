@@ -31,8 +31,10 @@ module cpu(input reset,       // positive reset signal
   /***** ID Stage *****/
   // ID
   wire [ 4: 0] ID_rs1;
+  wire [ 4: 0] ID_rs2;
   wire ID_is_ecall;
   wire ID_is_hazard;
+  reg [31: 0] ID_ecall_comp;
 
   // EX
   wire [31: 0] ID_PC;
@@ -56,12 +58,16 @@ module cpu(input reset,       // positive reset signal
 
   /***** EX Stage *****/
   //EX
-  wire [31: 0] EX_ALU_in_2;
+  reg  [31: 0] EX_ALU_in_1;
+  reg  [31: 0] EX_ALU_in_2;
+  reg  [31: 0] EX_ALU_rs2_data;
   wire [ 3: 0] EX_alu_op;
   wire [31: 0] EX_alu_out;
   wire EX_alu_bcond;
   wire [31: 0] EX_shifted_imm;
   wire [31: 0] EX_next_pc;
+  wire [ 1: 0] EX_forward_1;
+  wire [ 1: 0] EX_forward_2;
 
   // MEM
   wire EX_is_branch;
@@ -111,6 +117,8 @@ module cpu(input reset,       // positive reset signal
   reg ID_EX_reg_write;      // will be used in WB stage
   reg ID_EX_is_halted;       // will be used in WB stage
   // From others
+  reg [ 4: 0] ID_EX_rs1;
+  reg [ 4: 0] ID_EX_rs2;
   reg [31: 0] ID_EX_rs1_data;
   reg [31: 0] ID_EX_rs2_data;
   reg [31: 0] ID_EX_imm;
@@ -170,11 +178,9 @@ module cpu(input reset,       // positive reset signal
   end
 
   HazardDetection haz_detec (
-    .EX_reg_write(EX_reg_write),
-    .MEM_reg_write(MEM_reg_write),
+    .EX_mem_read(EX_mem_read),
     .ID_inst(IF_ID_inst),
     .EX_rd(EX_rd),
-    .MEM_rd(MEM_rd),
     .is_hazard(ID_is_hazard)
   );
 
@@ -183,7 +189,7 @@ module cpu(input reset,       // positive reset signal
     .reset (reset),        // input
     .clk (clk),          // input
     .rs1 (ID_rs1),          // input
-    .rs2 (IF_ID_inst[24:20]),          // input
+    .rs2 (ID_rs2),          // input
     .rd (MEM_WB_rd),           // input
     .rd_din (WB_rdin_data),       // input
     .write_enable (MEM_WB_reg_write),    // input
@@ -225,6 +231,8 @@ module cpu(input reset,       // positive reset signal
       ID_EX_rs2_data <= 32'b0;
       ID_EX_imm <= 32'b0;
       ID_EX_ALU_ctrl_unit_input <= 0;
+      ID_EX_rs1 <= 5'b0;
+      ID_EX_rs2 <= 5'b0;
       ID_EX_rd <= 5'b0;
       ID_EX_is_halted <= 0;
     end
@@ -239,10 +247,25 @@ module cpu(input reset,       // positive reset signal
       ID_EX_rs2_data <= ID_rs2_data;
       ID_EX_imm <= ID_imm;
       ID_EX_ALU_ctrl_unit_input <= ID_ALU_ctrl_unit_input;
+      ID_EX_rs1 <= ID_rs1;
+      ID_EX_rs2 <= ID_rs2;
       ID_EX_rd <= ID_rd;
       ID_EX_is_halted <= ID_is_halted;
     end
   end
+
+  ForwardingUnit forwarding_unit(
+    .is_ecall(ID_is_ecall),
+    .EX_rs1(ID_EX_rs1),
+    .EX_rs2(ID_EX_rs2),
+    .EX_rd(EX_rd),
+    .MEM_rd(MEM_rd),
+    .WB_rd(MEM_WB_rd),
+    .MEM_reg_write(MEM_reg_write),
+    .WB_reg_write(MEM_WB_reg_write),
+    .forward_1(EX_forward_1),
+    .forward_2(EX_forward_2)
+  );
 
   // ---------- ALU Control Unit ----------
   ALUControlUnit alu_ctrl_unit (
@@ -254,7 +277,7 @@ module cpu(input reset,       // positive reset signal
   // ---------- ALU ----------
   ALU alu (
     .alu_op(EX_alu_op),      // input
-    .alu_in_1(ID_EX_rs1_data),    // input  
+    .alu_in_1(EX_ALU_in_1),    // input  
     .alu_in_2(EX_ALU_in_2),    // input
     .alu_result(EX_alu_out),  // output
     .alu_zero(EX_is_branch)     // output
@@ -320,24 +343,48 @@ module cpu(input reset,       // positive reset signal
     is_halted <= MEM_WB_is_halted;
   end
 
+  always @(*) begin
+    case(EX_forward_1)
+    2'b00: EX_ALU_in_1 = ID_EX_rs1_data;
+    2'b01: EX_ALU_in_1 = WB_rdin_data;
+    2'b10: EX_ALU_in_1 = EX_MEM_alu_out;
+    default: EX_ALU_in_1 = ID_EX_rs1_data;
+    endcase
+    
+    case(EX_forward_2)
+    2'b00: EX_ALU_rs2_data = ID_EX_rs2_data;
+    2'b01: EX_ALU_rs2_data = WB_rdin_data;
+    2'b10: EX_ALU_rs2_data = EX_MEM_alu_out;
+    default: EX_ALU_rs2_data = ID_EX_rs2_data;
+    endcase
+  end
+
+  always @(*) begin
+    if(EX_forward_1 == 3)
+      ID_ecall_comp = EX_alu_out;
+    else
+      ID_ecall_comp = ID_rs1_data;
+  end
+
   assign next_pc = current_pc + 4;
   
   assign ID_PC = IF_ID_PC;
   assign ID_ALU_ctrl_unit_input = IF_ID_inst;
   assign ID_rd = IF_ID_inst[11: 7];
   assign ID_rs1 = ID_is_ecall ? 17 : IF_ID_inst[19:15];
-  assign ID_is_halted = (ID_is_ecall && (ID_rs1_data == 10));
+  assign ID_rs2 = IF_ID_inst[24:20];
+  assign ID_is_halted = (ID_is_ecall && (ID_ecall_comp == 10));
   
+  assign EX_ALU_in_2 = ID_EX_alu_src ? ID_EX_imm : EX_ALU_rs2_data;
   assign EX_reg_write = ID_EX_reg_write;
   assign EX_mem_to_reg = ID_EX_mem_to_reg;
   assign EX_is_branch = ID_EX_is_branch;
   assign EX_mem_read = ID_EX_mem_read;
   assign EX_mem_write = ID_EX_mem_write;
-  assign EX_ALU_in_2 = (ID_EX_alu_src) ? ID_EX_imm : ID_EX_rs2_data;
   assign EX_shifted_imm = ID_EX_imm << 2;
-  assign EX_dmem_data = ID_EX_rs2_data;
   assign EX_rd = ID_EX_rd;
   assign EX_is_halted = ID_EX_is_halted;
+  assign EX_dmem_data = EX_ALU_rs2_data;
   
   assign MEM_reg_write = EX_MEM_reg_write;
   assign MEM_mem_to_reg = EX_MEM_mem_to_reg;
@@ -347,5 +394,5 @@ module cpu(input reset,       // positive reset signal
   assign MEM_is_halted = EX_MEM_is_halted;
   
   assign WB_rdin_data = (MEM_WB_mem_to_reg) ? MEM_WB_mem_to_reg_src_1 : MEM_WB_mem_to_reg_src_2;
-  
+
 endmodule
