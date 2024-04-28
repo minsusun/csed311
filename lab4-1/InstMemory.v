@@ -1,7 +1,9 @@
-module InstMemory #(parameter MEM_DEPTH = 1024) (input reset,
-                                                 input clk,
-                                                 input [31:0] addr,   // address of the instruction memory
-                                                 output [31:0] dout); // instruction at addr
+module InstMemory #(parameter MEM_DEPTH = 1024) (
+  input reset,
+  input clk,
+  input [31:0] addr,   // address of the instruction memory
+  output [31:0] dout
+); // instruction at addr
   integer i;
   // Instruction memory
   reg [31:0] mem[0:MEM_DEPTH - 1];
