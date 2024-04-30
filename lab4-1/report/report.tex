@@ -5,6 +5,8 @@
 \usepackage{setspace}
 \usepackage{underscore}
 \usepackage{caption}
+\usepackage{array}
+\usepackage{multirow}
 \usepackage[margin=3cm]{geometry}
 \newcommand{\code}[1]{\texttt{#1}}
 \setminted{
@@ -349,13 +351,32 @@ Hazard Detection Module은 현재 Data Hazard가 발생하여 다른 Stage의 �
 
 \subsection{Forwarding Unit}
 
-Forwarding Unit은 교재에서 제시하고 있는 기준 그대로 Signal을 지정하여 구현하였다. 사용된 Signal의 상세 내용은 아래의 그림과 같다.
+Forwarding Unit은 교재에서 제시하고 있는 기준 그대로 Signal을 지정하여 구현하였다. 사용된 Signal의 상세 내용은 아래의 표와 같다.
 
-\begin{figure}[!h]
+\begin{table}[h!]
     \centering
-    \includegraphics[width=\linewidth]{img/forwarding-unit-signals.png}
-    \caption{Forwarding Unit Signals Specification}
-\end{figure}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{c|c|c|p{6cm}}
+    \hline
+    Multiplexor & Signal     & Source                   & \multicolumn{1}{c}{Explanation}                                                                                                    \\
+    \hline
+    \multirow{4}{*}{ForwardA} & \code{2'b00} & ID/EX pipeline register  & The first ALU operand comes from the register file.                                                            \\
+    \cline{2-4}
+    & \code{2'b01} & EX/MEM pipeline register & The first ALU operand is forwarded from the prior ALU result.                                                  \\
+    \cline{2-4}
+    & \code{2'b10} & MEM/WB pipeline register & The first ALU operand is forwarded from data memory or an earlier ALU result.                                  \\
+    \cline{2-4}
+    & \code{2'b11} & ALUOut in EX stage       & The stored value of x17 register (used in determining \code{is\_halted} signal) is forwarded from the prior ALU result. \\
+    \hline
+    \multirow{3}{*}{ForwardB} & \code{2'b00} & ID/EX pipeline register  & The second ALU operand comes from the register file.                                                           \\
+    \cline{2-4}
+    & \code{2'b01} & EX/MEM pipeline register & The second ALU operand is forwarded from the prior ALU result.                                                 \\
+    \cline{2-4}
+    & \code{2'b10} & ID/EX pipeline register  & The second ALU operand is forwarded from data memory or an earlier ALU result.                                \\
+    \hline
+    \end{tabular}
+    \caption{The ForwardA, ForwardB signals and its explanations}
+\end{table}
 
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
