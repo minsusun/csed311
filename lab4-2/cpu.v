@@ -36,6 +36,7 @@ module cpu(input reset,       // positive reset signal
   wire ID_is_hazard;
   reg [31: 0] ID_ecall_comp;
   wire ID_bcond;
+  wire [31: 0] ID_PC_add_imm;
 
   // EX
   wire [31: 0] ID_PC;
@@ -108,7 +109,7 @@ module cpu(input reset,       // positive reset signal
   
   /***** ID/EX pipeline registers *****/
   // From the control unit
-  reg [31: 0] ID_EX_PC;     // will be used in EX stage
+  // reg [31: 0] ID_EX_PC;     // will be used in EX stage
   reg [ 1: 0] ID_EX_alu_op;         // will be used in EX stage
   reg ID_EX_alu_src;        // will be used in EX stage
   reg ID_EX_is_branch;      // will be used in MEM stage
@@ -218,6 +219,12 @@ module cpu(input reset,       // positive reset signal
     .part_of_inst(IF_ID_inst),  // input
     .imm_gen_out(ID_imm)    // output
   );
+
+  PCGenerator PC_calc_imm(
+    .PC(IF_ID_PC),
+    .imm(ID_imm),
+    .next_pc(ID_PC_add_imm)
+  )
 
 
   BranchPreFetcher branch_prefetch(
@@ -378,7 +385,7 @@ module cpu(input reset,       // positive reset signal
 
   assign next_pc = current_pc + 4;
   
-  assign ID_PC = IF_ID_PC;
+  // assign ID_PC = IF_ID_PC;
   assign ID_ALU_ctrl_unit_input = IF_ID_inst;
   assign ID_rd = IF_ID_inst[11: 7];
   assign ID_rs1 = ID_is_ecall ? 17 : IF_ID_inst[19:15];
