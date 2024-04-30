@@ -35,6 +35,7 @@ module cpu(input reset,       // positive reset signal
   wire ID_is_ecall;
   wire ID_is_hazard;
   reg [31: 0] ID_ecall_comp;
+  wire ID_bcond;
 
   // EX
   wire [31: 0] ID_PC;
@@ -216,6 +217,15 @@ module cpu(input reset,       // positive reset signal
   ImmediateGenerator imm_gen(
     .part_of_inst(IF_ID_inst),  // input
     .imm_gen_out(ID_imm)    // output
+  );
+
+
+  BranchPreFetcher branch_prefetch(
+    .i_register_a(ID_rs1),
+    .i_register_b(ID_rs2),
+    .opcode(IF_ID_inst[ 6: 0]),
+    .btype(IF_ID_inst[14:12]),
+    .bcond(ID_bcond)
   );
 
   // Update ID/EX pipeline registers here
