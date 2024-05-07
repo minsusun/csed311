@@ -22,6 +22,9 @@ module cpu(input reset,       // positive reset signal
   wire [31: 0] next_pc;
 
   /***** IF Stage *****/
+  // IF
+  wire IF_flush;
+
   // ID
   wire [31: 0] IF_inst;
 
@@ -172,6 +175,7 @@ module cpu(input reset,       // positive reset signal
   BranchPredict branch_predict (
     .reset(reset),
     .clk(clk),
+    .is_branch(), // TODO
     .is_taken(),  // TODO
     .prediction() // TODO
   );
@@ -392,6 +396,9 @@ module cpu(input reset,       // positive reset signal
 
   assign next_pc = current_pc + 4;
   
+  // TODO: is_branch(instruction in ID stage) && prediction != is_taken
+  assign IF_flush = 0;
+
   // assign ID_PC = IF_ID_PC;
   assign ID_ALU_ctrl_unit_input = IF_ID_inst;
   assign ID_rd = IF_ID_inst[11: 7];
