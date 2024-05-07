@@ -169,6 +169,13 @@ module cpu(input reset,       // positive reset signal
     .dout(IF_inst)     // output
   );
 
+  BranchPredict branch_predict (
+    .reset(reset),
+    .clk(clk),
+    .is_taken(),  // TODO
+    .prediction() // TODO
+  );
+
   // Update IF/ID pipeline registers here
   always @(posedge clk) begin
     if (reset) begin
