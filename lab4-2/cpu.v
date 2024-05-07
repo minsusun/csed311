@@ -231,7 +231,7 @@ module cpu(input reset,       // positive reset signal
     .PC(IF_ID_PC),
     .imm(ID_imm),
     .next_pc(ID_PC_add_imm)
-  )
+  );ㄴ
 
 
   BranchPreFetcher branch_prefetch(
