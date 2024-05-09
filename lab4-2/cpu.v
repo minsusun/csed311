@@ -115,9 +115,9 @@ module cpu(
   // IF stage combinational logics
   always @(*) begin
     IF_pc_src = ID_EX_is_jalr ? 2'b01 : ID_pc_src;
-    IF_next_pc_0 = IF_ID_current_pc + ID_immediate;
-    IF_next_pc_1 = EX_alu_result;
-    IF_next_pc_2 = IF_current_pc + 4;
+    IF_next_pc_0 = IF_current_pc + 4;
+    IF_next_pc_1 = IF_ID_current_pc + ID_immediate;
+    IF_next_pc_2 = EX_alu_result;
 
     case(IF_pc_src)
     2'b00: IF_next_pc = IF_next_pc_0;
@@ -223,6 +223,7 @@ module cpu(
   ForwardingUnit forwarding_unit(
     .EX_rs1(ID_EX_inst[19:15]),
     .EX_rs2(ID_EX_inst[24:20]),
+    .EX_rd(ID_EX_inst[11:7]),
     .MEM_rd(EX_MEM_inst[11:7]),
     .WB_rd(MEM_WB_inst[11:7]),
     .MEM_reg_write(MEM_reg_write),
