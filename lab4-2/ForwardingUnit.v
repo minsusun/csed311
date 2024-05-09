@@ -1,5 +1,5 @@
+// TODO: Forwarding for branch computation in ID stage.
 module ForwardingUnit(
-    input is_ecall,
     input [4:0] EX_rs1,
     input [4:0] EX_rs2,
     input [4:0] EX_rd,
@@ -11,9 +11,7 @@ module ForwardingUnit(
     output reg [1:0] forward_2
 );
     always @(*) begin
-        if(is_ecall && (EX_rd == 17))
-            forward_1 = 2'b11;
-        else if((EX_rs1 != 5'b0) && (EX_rs1 == MEM_rd) && MEM_reg_write)
+        if((EX_rs1 != 5'b0) && (EX_rs1 == MEM_rd) && MEM_reg_write)
             forward_1 = 2'b10;
         else if((EX_rs1 != 5'b0) && (EX_rs1 == WB_rd) && WB_reg_write)
             forward_1 = 2'b01;
