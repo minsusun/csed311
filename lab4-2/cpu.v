@@ -2,6 +2,8 @@
 // TODO: Fix schematic in ID stage (let is_hazard connected with mux, ID stage forwardings)
 // TODO: Fix schematic in IF stage (let is_hazard determine whether PC and IR latching is enabled or not)
 // TODO: Implement data forwarding in ID stage (for Branch prefetch, halt detection)
+`include "opcodes.v"
+
 module cpu(
     input reset,
     input clk,
@@ -18,7 +20,6 @@ module cpu(
   // {STAGE1_NAME}_{STAGE2_NAME}_REGISTERNAME
 
   // IF stage wire declarations
-  reg [1:0] IF_pc_src;
   reg [31:0] IF_next_pc;
   reg [31:0] IF_next_pc_0;
   reg [31:0] IF_next_pc_1;
@@ -45,6 +46,8 @@ module cpu(
   wire ID_is_branch;
   wire ID_bcond;
   wire ID_is_hazard;
+  wire ID_is_control_hazard;
+  wire ID_is_data_hazard;
   wire ID_is_ecall;
   wire ID_is_halted;
   wire [1:0] ID_forward_1;
@@ -64,6 +67,7 @@ module cpu(
   reg ID_EX_pc_src;
   reg ID_EX_is_jalr;
   reg ID_EX_is_halted;
+  reg ID_EX_is_control_hazard;
   reg [1:0] ID_EX_alu_op;
   reg [31:0] ID_EX_current_pc;
   reg [31:0] ID_EX_rs1_dout;
@@ -79,6 +83,8 @@ module cpu(
   wire [1:0] EX_forward_2;
   wire [3:0] EX_alu_ctrl;
   wire [31:0] EX_alu_result;
+
+  // checking if the instruction in EX stage generate control hazard!
 
   // EX/MEM stage pipeline register declarations
   reg EX_MEM_reg_write;
@@ -112,7 +118,7 @@ module cpu(
   PC pc(
     .reset(reset),
     .clk(clk),
-    .pc_write(!ID_is_hazard),
+    .pc_write(!ID_is_data_hazard),
     .next_pc(IF_next_pc),
     .current_pc(IF_current_pc)
   );
@@ -126,12 +132,11 @@ module cpu(
 
   // IF stage combinational logics
   always @(*) begin
-    IF_pc_src = ID_EX_is_jalr ? 2'b01 : ID_pc_src;
     IF_next_pc_0 = IF_current_pc + 4;
     IF_next_pc_1 = IF_ID_current_pc + ID_immediate;
     IF_next_pc_2 = EX_alu_result;
 
-    case(IF_pc_src)
+    case(ID_pc_src)
     2'b00: IF_next_pc = IF_next_pc_0;
     2'b01: IF_next_pc = IF_next_pc_1;
     2'b10: IF_next_pc = IF_next_pc_2;
@@ -141,7 +146,7 @@ module cpu(
   
   // IF/ID stage pipeline registers updates
   always @(posedge clk) begin
-    if(!ID_is_hazard) begin
+    if(!ID_is_data_hazard) begin
       IF_ID_current_pc <= reset ? 0 : IF_current_pc;
       IF_ID_inst <= reset ? 0 : IF_inst;
     end
@@ -156,7 +161,8 @@ module cpu(
     .EX_opcode(ID_EX_inst[6:0]),
     .EX_rd(ID_EX_inst[11:7]),
     .EX_mem_read(ID_EX_mem_read),
-    .is_hazard(ID_is_hazard)
+    .is_control_hazard(ID_is_control_hazard),
+    .is_data_hazard(ID_is_data_hazard)
   );
 
   ControlUnit control_unit(
@@ -225,10 +231,12 @@ module cpu(
 
   // ID/EX stage pipeline registers updates
   always @(posedge clk) begin
-    ID_EX_reg_write <= reset ? 0 : (ID_is_hazard ? 0 : ID_reg_write);
+    ID_EX_reg_write <= 
+      reset ? 0 : (ID_is_data_hazard || ID_EX_is_control_hazard ? 0 : ID_reg_write);
+    ID_EX_mem_write <= 
+      reset ? 0 : (ID_is_data_hazard || ID_EX_is_control_hazard ? 0 : ID_mem_write);
     ID_EX_alu_src <= reset ? 0 : ID_alu_src;
     ID_EX_mem_read <= reset ? 0 : ID_mem_read;
-    ID_EX_mem_write <= reset ? 0 : (ID_is_hazard ? 0 : ID_mem_write);
     ID_EX_mem_to_reg <= reset ? 0 : ID_mem_to_reg;
     ID_EX_pc_to_reg <= reset ? 0 : ID_pc_to_reg;
     ID_EX_alu_op <= reset ? 0 : ID_alu_op;
@@ -239,6 +247,7 @@ module cpu(
     ID_EX_inst <= reset ? 0 : IF_ID_inst;
     ID_EX_immediate <= reset ? 0 : ID_immediate;
     ID_EX_is_halted <= reset ? 0 : ID_is_halted;
+    ID_EX_is_control_hazard <= reset ? 0 : ID_is_control_hazard;
   end
 
   // EX stage module instantiations

@@ -53,3 +53,5 @@
 `define ALU_BNE 4'b1000
 `define ALU_BLT 4'b1001
 `define ALU_BGE 4'b1010
+
+`define NOP 32'h00000013

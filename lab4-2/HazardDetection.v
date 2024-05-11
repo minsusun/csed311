@@ -8,7 +8,8 @@ module HazardDetection (
     input [6:0] EX_opcode,
     input [4:0] EX_rd,
     input EX_mem_read,
-    output is_hazard
+    output is_control_hazard,
+    output is_data_hazard
 );
     wire is_arith = (ID_opcode == `ARITHMETIC);
     wire is_store = (ID_opcode == `STORE);
@@ -22,10 +23,11 @@ module HazardDetection (
 
     wire use_rs1 = (!is_lui || !is_auipc || !is_jal) && !is_rs1_zero;
     wire use_rs2 = (is_arith || is_store || is_branch) && !is_rs2_zero;
-    wire is_control_hazard = is_jalr || is_jal || (is_branch && bcond);
-    wire is_data_hazard = 
+
+    assign is_control_hazard = 
+        is_jalr || is_jal || (is_branch && bcond);
+
+    assign is_data_hazard = 
         ((ID_rs1 == EX_rd) && use_rs1 || (ID_rs2 == EX_rd) && use_rs2) 
             && EX_mem_read;
-
-    assign is_hazard = is_control_hazard || is_data_hazard;
 endmodule

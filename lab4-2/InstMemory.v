@@ -24,7 +24,7 @@ module InstMemory #(parameter MEM_DEPTH = 1024) (
           /* verilator lint_on BLKSEQ */
           // DO NOT TOUCH COMMENT ABOVE
       // Provide path of the file including instructions with binary format
-      $readmemh("./student_tb/non-controlflow_mem.txt", mem);
+      $readmemh("./student_tb/recursive_mem.txt", mem);
     end
   end
 
