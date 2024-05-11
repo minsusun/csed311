@@ -1,27 +1,20 @@
 `include "opcodes.v"
 
 module BranchPreFetcher(
-    input [31: 0] i_register_a,
-    input [31: 0] i_register_b,
-    input [ 6: 0] opcode,
-    input [ 2: 0] btype,
-    output bcond
+    input is_branch,
+    input [2:0] btype,
+    input [31:0] rs1_dout,
+    input [31:0] rs2_dout,
+    output reg bcond
 );
 
 always @(*) begin
-    case(opcode)
-        `BRANCH: begin
-            case(Btype)
-                `FUNCT3_BEQ: bcond = i_register_a == i_register_b;
-                `FUNCT3_BNE: bcond = i_register_a != i_register_b;
-                `FUNCT3_BLT: bcond = i_register_a  < i_register_b;
-                `FUNCT3_BGE: bcond = i_register_a >= i_register_b;
-                default: bcond = 0;
-            endcase
-        end
+    case(btype)
+        `FUNCT3_BEQ: bcond = is_branch ? (rs1_dout == rs2_dout) : 0;
+        `FUNCT3_BNE: bcond = is_branch ? (rs1_dout != rs2_dout) : 0;
+        `FUNCT3_BLT: bcond = is_branch ? (rs1_dout  < rs2_dout) : 0;
+        `FUNCT3_BGE: bcond = is_branch ? (rs1_dout >= rs2_dout) : 0;
         default: bcond = 0;
     endcase
 end
-
-
 endmodule

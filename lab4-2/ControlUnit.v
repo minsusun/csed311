@@ -12,6 +12,7 @@ module ControlUnit(
     output [1:0] pc_src,
     output [1:0] alu_op,
     output is_jalr,
+    output is_branch,
     output is_ecall
 );
     wire [6:0] opcode = inst[6:0];
@@ -21,12 +22,12 @@ module ControlUnit(
     wire is_load = (opcode == `LOAD);
     assign is_jalr = (opcode == `JALR);
     wire is_store = (opcode == `STORE);
-    wire is_branch = (opcode == `BRANCH);
+    assign is_branch = (opcode == `BRANCH);
     wire is_jal = (opcode == `JAL);
     assign is_ecall = (opcode == `ECALL);
 
-    assign reg_write = !is_store || !is_branch;
-    assign alu_src = !is_arith || !is_branch;
+    assign reg_write = !is_store && !is_branch;
+    assign alu_src = !is_arith && !is_branch;
     assign mem_read = is_load;
     assign mem_write = is_store;
     assign mem_to_reg = is_load;
@@ -34,5 +35,5 @@ module ControlUnit(
     assign pc_src[0] = is_jal || (is_branch && bcond); 
     assign pc_src[1] = is_jalr;
     assign alu_op[0] = 1'b0;
-    assign alu_op[1] = !is_load || !is_store || !is_jalr;
+    assign alu_op[1] = !is_load && !is_store && !is_jalr;
 endmodule
