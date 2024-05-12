@@ -1,6 +1,8 @@
 // TODO: Fix schematic in WB stage (swap mem_to_reg mux select)
 // TODO: Fix schematic in ID stage (let is_hazard connected with mux, ID stage forwardings)
 // TODO: Fix schematic in IF stage (let is_hazard determine whether PC and IR latching is enabled or not)
+// TODO: Refactor code
+// TODO: Implement 2-bit saturation counter
 // TODO: Implement data forwarding in ID stage (for Branch prefetch, halt detection)
 `include "opcodes.v"
 
@@ -118,7 +120,7 @@ module cpu(
   PC pc(
     .reset(reset),
     .clk(clk),
-    .pc_write(!ID_is_data_hazard),
+    .pc_write(!ID_is_data_hazard && !ID_is_jalr || ID_EX_is_jalr),
     .next_pc(IF_next_pc),
     .current_pc(IF_current_pc)
   );
@@ -136,7 +138,7 @@ module cpu(
     IF_next_pc_1 = IF_ID_current_pc + ID_immediate;
     IF_next_pc_2 = EX_alu_result;
 
-    case(ID_pc_src)
+    case(ID_EX_is_jalr ? 2'b10 : ID_pc_src)
     2'b00: IF_next_pc = IF_next_pc_0;
     2'b01: IF_next_pc = IF_next_pc_1;
     2'b10: IF_next_pc = IF_next_pc_2;
@@ -146,7 +148,7 @@ module cpu(
   
   // IF/ID stage pipeline registers updates
   always @(posedge clk) begin
-    if(!ID_is_data_hazard) begin
+    if(!ID_is_data_hazard && !ID_is_jalr || ID_EX_is_jalr) begin
       IF_ID_current_pc <= reset ? 0 : IF_current_pc;
       IF_ID_inst <= reset ? 0 : IF_inst;
     end
@@ -232,9 +234,9 @@ module cpu(
   // ID/EX stage pipeline registers updates
   always @(posedge clk) begin
     ID_EX_reg_write <= 
-      reset ? 0 : (ID_is_data_hazard || ID_EX_is_control_hazard ? 0 : ID_reg_write);
+      reset ? 0 : (ID_is_data_hazard || ID_is_jalr || ID_EX_is_control_hazard ? 0 : ID_reg_write);
     ID_EX_mem_write <= 
-      reset ? 0 : (ID_is_data_hazard || ID_EX_is_control_hazard ? 0 : ID_mem_write);
+      reset ? 0 : (ID_is_data_hazard || ID_is_jalr || ID_EX_is_control_hazard ? 0 : ID_mem_write);
     ID_EX_alu_src <= reset ? 0 : ID_alu_src;
     ID_EX_mem_read <= reset ? 0 : ID_mem_read;
     ID_EX_mem_to_reg <= reset ? 0 : ID_mem_to_reg;
@@ -306,7 +308,7 @@ module cpu(
     EX_MEM_mem_read <= reset ? 0 : ID_EX_mem_read;
     EX_MEM_mem_write <= reset ? 0 : ID_EX_mem_write;
     EX_MEM_mem_to_reg <= reset ? 0 : ID_EX_mem_to_reg;
-    EX_MEM_pc_to_reg <= reset ? 0 : EX_MEM_pc_to_reg;
+    EX_MEM_pc_to_reg <= reset ? 0 : ID_EX_pc_to_reg;
     EX_MEM_alu_result <= reset ? 0 : EX_alu_result;
     EX_MEM_current_pc <= reset ? 0 : ID_EX_current_pc;
     EX_MEM_rs2_dout <= reset ? 0 : EX_rs2_dout;
@@ -340,6 +342,6 @@ module cpu(
 
   // WB stage combinational logics
   assign WB_din = 
-      MEM_WB_pc_to_reg ? MEM_WB_current_pc : 
+      MEM_WB_pc_to_reg ? (MEM_WB_current_pc + 4) : 
         (MEM_WB_mem_to_reg ? MEM_WB_dout : MEM_WB_alu_result);
 endmodule
