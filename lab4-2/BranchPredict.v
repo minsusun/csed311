@@ -14,7 +14,7 @@ module BranchPredict(
   output prediction,
   output [31:0] predicted_pc
 );
-  parameter INDEX_LENGTH = 2;
+  parameter INDEX_LENGTH = 4;
   parameter ENTRY_NUMBER = 2 ** INDEX_LENGTH;
   parameter TAG_LENGTH = 32 - INDEX_LENGTH - 2;
 
