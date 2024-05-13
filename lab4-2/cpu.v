@@ -1,9 +1,3 @@
-// TODO: Fix schematic in WB stage (swap mem_to_reg mux select)
-// TODO: Fix schematic in ID stage (let is_hazard connected with mux, ID stage forwardings)
-// TODO: Fix schematic in IF stage (let is_hazard determine whether PC and IR latching is enabled or not)
-// TODO: Refactor code
-// TODO: Implement 2-bit saturation counter
-// TODO: Implement data forwarding in ID stage (for Branch prefetch, halt detection)
 `include "opcodes.v"
 
 module cpu(
@@ -22,105 +16,27 @@ module cpu(
   // {STAGE1_NAME}_{STAGE2_NAME}_REGISTERNAME
 
   // IF stage wire declarations
-  reg [31:0] IF_next_pc;
-  reg [31:0] IF_next_pc_0;
-  reg [31:0] IF_next_pc_1;
-  reg [31:0] IF_next_pc_2;
+  wire IF_pc_write;
+  wire IF_prediction;
+  wire IF_is_stall;
+  wire IF_is_flush;
+  wire [31:0] IF_next_pc;
   wire [31:0] IF_current_pc;
+  wire [31:0] IF_predicted_pc;
   wire [31:0] IF_inst;
 
   // IF/ID stage pipeline register declarations
+  reg IF_ID_prediction;
+  reg IF_ID_is_flush;
   reg [31:0] IF_ID_current_pc;
+  reg [31:0] IF_ID_predicted_pc;
   reg [31:0] IF_ID_inst;
-
-  // ID stage wire declarations
-  reg [31:0] ID_rs1_dout;
-  reg [31:0] ID_rs2_dout;
-  wire ID_reg_write;
-  wire ID_alu_src;
-  wire ID_mem_read;
-  wire ID_mem_write;
-  wire ID_mem_to_reg;
-  wire ID_pc_to_reg;
-  wire [1:0] ID_pc_src;
-  wire [1:0] ID_alu_op;
-  wire ID_is_jalr;
-  wire ID_is_branch;
-  wire ID_bcond;
-  wire ID_is_hazard;
-  wire ID_is_control_hazard;
-  wire ID_is_data_hazard;
-  wire ID_is_ecall;
-  wire ID_is_halted;
-  wire [1:0] ID_forward_1;
-  wire [1:0] ID_forward_2;
-  wire [4:0] ID_rs1;
-  wire [31:0] ID_rs1_dout_rf;
-  wire [31:0] ID_rs2_dout_rf;
-  wire [31:0] ID_immediate;
-
-  // ID/EX stage pipeline register declarations
-  reg ID_EX_reg_write;
-  reg ID_EX_alu_src;
-  reg ID_EX_mem_read;
-  reg ID_EX_mem_write;
-  reg ID_EX_mem_to_reg;
-  reg ID_EX_pc_to_reg;
-  reg ID_EX_pc_src;
-  reg ID_EX_is_jalr;
-  reg ID_EX_is_halted;
-  reg ID_EX_is_control_hazard;
-  reg [1:0] ID_EX_alu_op;
-  reg [31:0] ID_EX_current_pc;
-  reg [31:0] ID_EX_rs1_dout;
-  reg [31:0] ID_EX_rs2_dout;
-  reg [31:0] ID_EX_inst;
-  reg [31:0] ID_EX_immediate;
-
-  // EX stage wire declarations
-  reg [31:0] EX_rs2_dout;
-  reg [31:0] EX_alu_in_1;
-  reg [31:0] EX_alu_in_2;
-  wire [1:0] EX_forward_1;
-  wire [1:0] EX_forward_2;
-  wire [3:0] EX_alu_ctrl;
-  wire [31:0] EX_alu_result;
-
-  // checking if the instruction in EX stage generate control hazard!
-
-  // EX/MEM stage pipeline register declarations
-  reg EX_MEM_reg_write;
-  reg EX_MEM_mem_read;
-  reg EX_MEM_mem_write;
-  reg EX_MEM_mem_to_reg;
-  reg EX_MEM_pc_to_reg;
-  reg EX_MEM_is_halted;
-  reg [31:0] EX_MEM_current_pc;
-  reg [31:0] EX_MEM_alu_result;
-  reg [31:0] EX_MEM_rs2_dout;
-  reg [31:0] EX_MEM_inst;
-
-  // MEM stage wire declarations
-  wire [31:0] MEM_dout;
-
-  // MEM/WB stage pipeline register declarations
-  reg MEM_WB_reg_write;
-  reg MEM_WB_mem_to_reg;
-  reg MEM_WB_pc_to_reg;
-  reg MEM_WB_is_halted;
-  reg [31:0] MEM_WB_current_pc;
-  reg [31:0] MEM_WB_dout;
-  reg [31:0] MEM_WB_alu_result;
-  reg [31:0] MEM_WB_inst;
-
-  // WB stage wire declarations
-  wire [31:0] WB_din;
 
   // IF stage module instantiations
   PC pc(
     .reset(reset),
     .clk(clk),
-    .pc_write(!ID_is_data_hazard && !ID_is_jalr || ID_EX_is_jalr),
+    .pc_write(IF_pc_write),
     .next_pc(IF_next_pc),
     .current_pc(IF_current_pc)
   );
@@ -132,39 +48,100 @@ module cpu(
     .dout(IF_inst)
   );
 
-  // IF stage combinational logics
-  always @(*) begin
-    IF_next_pc_0 = IF_current_pc + 4;
-    IF_next_pc_1 = IF_ID_current_pc + ID_immediate;
-    IF_next_pc_2 = EX_alu_result;
+  BranchPredict branch_predict(
+    .reset(reset),
+    .clk(clk),
+    .is_correct(ID_EX_is_correct),
+    .is_control_flow(ID_EX_is_jalr || ID_EX_is_jal || ID_EX_is_branch),
+    .current_pc(IF_current_pc),
+    .pc_to_update(ID_EX_current_pc),
+    .branch_target(ID_EX_branch_target),
+    .prediction(IF_prediction),
+    .predicted_pc(IF_predicted_pc)
+  );
 
-    case(ID_EX_is_jalr ? 2'b10 : ID_pc_src)
-    2'b00: IF_next_pc = IF_next_pc_0;
-    2'b01: IF_next_pc = IF_next_pc_1;
-    2'b10: IF_next_pc = IF_next_pc_2;
-    default: IF_next_pc = 0;
-    endcase
-  end
-  
-  // IF/ID stage pipeline registers updates
+  // IF stage combinational logics
+  assign IF_next_pc = ID_is_correct ? IF_predicted_pc : ID_next_pc;
+  assign IF_pc_write = !IF_is_stall;
+  assign IF_is_stall = ID_is_data_hazard;
+  assign IF_is_flush = ID_is_control_hazard;
+
+  // IF/ID stage pipeline register updates
+  // IF_is_flush must passed until ID stage, and if current instruction in 
+  // ID stage's is_flush is asserted, its mem_write and reg_write must be 
+  // de-asserted.
   always @(posedge clk) begin
-    if(!ID_is_data_hazard && !ID_is_jalr || ID_EX_is_jalr) begin
+    if(!IF_is_stall) begin
+      IF_ID_is_flush <= reset ? 0 : IF_is_flush;
+      IF_ID_prediction <= reset ? 0 : IF_prediction;
       IF_ID_current_pc <= reset ? 0 : IF_current_pc;
+      IF_ID_predicted_pc <= reset ? 0 : IF_predicted_pc;
       IF_ID_inst <= reset ? 0 : IF_inst;
     end
   end
 
+  // ID stage wire declarations
+  wire ID_bcond;
+  wire ID_is_stall;
+  wire ID_is_taken;
+  wire ID_reg_write;
+  wire ID_alu_src;
+  wire ID_mem_read;
+  wire ID_mem_write;
+  wire ID_mem_to_reg;
+  wire ID_pc_to_reg;
+  wire [1:0] ID_alu_op;
+  wire ID_is_jal;
+  wire ID_is_jalr;
+  wire ID_is_branch;
+  wire ID_is_ecall;
+  wire ID_is_data_hazard;
+  wire ID_is_control_hazard;
+  wire ID_is_correct;
+  wire [1:0] ID_forward_1;
+  wire [1:0] ID_forward_2;
+  wire [4:0] ID_rs1;
+  wire [31:0] ID_imm;
+  wire [31:0] ID_next_pc;
+  reg  [31:0] ID_rs1_dout;
+  reg  [31:0] ID_rs2_dout;
+  wire [31:0] ID_rs1_dout_rf;
+  wire [31:0] ID_rs2_dout_rf;
+  wire [31:0] ID_branch_target;
+
+  // ID/EX stage pipeline register declarations
+  reg ID_EX_alu_src;
+  reg [1:0] ID_EX_alu_op;
+  reg ID_EX_mem_read;
+  reg ID_EX_mem_write;
+  reg ID_EX_is_jalr;
+  reg ID_EX_is_jal;
+  reg ID_EX_is_branch;
+  reg ID_EX_is_correct;
+  reg ID_EX_is_halted;
+  reg ID_EX_reg_write;
+  reg ID_EX_mem_to_reg;
+  reg ID_EX_pc_to_reg;
+  reg [31:0] ID_EX_inst;
+  reg [31:0] ID_EX_current_pc;
+  reg [31:0] ID_EX_branch_target;
+  reg [31:0] ID_EX_rs1_dout;
+  reg [31:0] ID_EX_rs2_dout;
+  reg [31:0] ID_EX_imm;
+
   // ID stage module instantiations
   HazardDetection hazard_detection(
     .bcond(ID_bcond),
+    .prediction(IF_ID_prediction),
     .ID_opcode(IF_ID_inst[6:0]),
     .ID_rs1(ID_rs1),
     .ID_rs2(IF_ID_inst[24:20]),
-    .EX_opcode(ID_EX_inst[6:0]),
     .EX_rd(ID_EX_inst[11:7]),
+    .MEM_rd(EX_MEM_inst[11:7]),
+    .MEM_mem_read(EX_MEM_mem_read),
     .EX_mem_read(ID_EX_mem_read),
-    .is_control_hazard(ID_is_control_hazard),
-    .is_data_hazard(ID_is_data_hazard)
+    .is_data_hazard(ID_is_data_hazard),
+    .is_control_hazard(ID_is_control_hazard)
   );
 
   ControlUnit control_unit(
@@ -176,9 +153,9 @@ module cpu(
     .mem_write(ID_mem_write),
     .mem_to_reg(ID_mem_to_reg),
     .pc_to_reg(ID_pc_to_reg),
-    .pc_src(ID_pc_src),
     .alu_op(ID_alu_op),
     .is_jalr(ID_is_jalr),
+    .is_jal(ID_is_jal),
     .is_branch(ID_is_branch),
     .is_ecall(ID_is_ecall)
   );
@@ -198,11 +175,26 @@ module cpu(
 
   ImmediateGenerator immediate_generator(
     .inst(IF_ID_inst),
-    .immediate(ID_immediate)
+    .immediate(ID_imm)
   );
 
+  ForwardingUnit forwarding_unit(
+    .ID_rs1(ID_rs1),
+    .ID_rs2(IF_ID_inst[24:20]),
+    .EX_rd(ID_EX_inst[11:7]),
+    .MEM_rd(EX_MEM_inst[11:7]),
+    .WB_rd(MEM_WB_inst[11:7]),
+    .EX_reg_write(ID_EX_reg_write),
+    .MEM_reg_write(EX_MEM_reg_write),
+    .WB_reg_write(MEM_WB_reg_write),
+    .forward_1(ID_forward_1),
+    .forward_2(ID_forward_2)
+  );
+
+  // Notice that the newer version of BranchPreFetcher doesn't take is_branch
+  // as input. That is, you must check if current ID instruction is branch
+  // instruction or not before using the bcond signal.
   BranchPreFetcher branch_prefetcher(
-    .is_branch(ID_is_branch),
     .btype(IF_ID_inst[14:12]),
     .rs1_dout(ID_rs1_dout),
     .rs2_dout(ID_rs2_dout),
@@ -210,52 +202,78 @@ module cpu(
   );
 
   // ID stage combinational logics
+  assign ID_is_stall = ID_is_data_hazard;
+  assign ID_is_taken = ID_is_jal || ID_is_jalr || ID_is_branch && ID_bcond; 
   assign ID_rs1 = ID_is_ecall ? 17 : IF_ID_inst[19:15];
-  assign ID_is_halted = ID_is_ecall && (ID_rs1_dout == 10);
+  assign ID_branch_target = IF_ID_current_pc + ID_imm; 
+  assign ID_is_correct = !(IF_ID_prediction ^ ID_is_taken);
+  // What about JALR instructions?
+  assign ID_next_pc = (ID_is_jal || ID_is_branch && ID_bcond) ? 
+    ID_branch_target : IF_ID_current_pc + 4;
 
   always @(*) begin
     case(ID_forward_1)
-    2'b00: ID_rs1_dout = ID_rs1_dout_rf;
-    2'b01: ID_rs1_dout = WB_din;
-    2'b10: ID_rs1_dout = MEM_dout;
     2'b11: ID_rs1_dout = EX_alu_result;
+    2'b10: ID_rs1_dout = EX_MEM_alu_result;
+    2'b01: ID_rs1_dout = WB_din;
+    2'b00: ID_rs1_dout = ID_rs1_dout_rf;
     default: ID_rs1_dout = 0;
     endcase
 
     case(ID_forward_2)
-    2'b00: ID_rs2_dout = ID_rs2_dout_rf;
-    2'b01: ID_rs2_dout = WB_din;
-    2'b10: ID_rs2_dout = MEM_dout;
     2'b11: ID_rs2_dout = EX_alu_result;
+    2'b10: ID_rs2_dout = EX_MEM_alu_result;
+    2'b01: ID_rs2_dout = WB_din;
+    2'b00: ID_rs2_dout = ID_rs2_dout_rf;
     default: ID_rs2_dout = 0;
     endcase
   end
 
-  // ID/EX stage pipeline registers updates
+  // ID/EX stage pipeline register updates
   always @(posedge clk) begin
-    ID_EX_reg_write <= 
-      reset ? 0 : (ID_is_data_hazard || ID_is_jalr || ID_EX_is_control_hazard ? 0 : ID_reg_write);
-    ID_EX_mem_write <= 
-      reset ? 0 : (ID_is_data_hazard || ID_is_jalr || ID_EX_is_control_hazard ? 0 : ID_mem_write);
     ID_EX_alu_src <= reset ? 0 : ID_alu_src;
+    ID_EX_alu_op <= reset ? 0 : ID_alu_op;
     ID_EX_mem_read <= reset ? 0 : ID_mem_read;
+    ID_EX_mem_write <= 
+      (reset || IF_ID_is_flush || ID_is_stall) ? 0 : ID_mem_write;
+    ID_EX_is_jalr <= reset ? 0 : ID_is_jalr;
+    ID_EX_is_jal <= reset ? 0 : ID_is_jal;
+    ID_EX_is_branch <= reset ? 0 : ID_is_branch;
+    ID_EX_is_correct <= reset ? 0 : ID_is_correct;
+    ID_EX_is_halted <= reset ? 0 : ID_is_ecall && (ID_rs1_dout == 10);
+    ID_EX_reg_write <= 
+      (reset || IF_ID_is_flush || ID_is_stall) ? 0 : ID_reg_write;
     ID_EX_mem_to_reg <= reset ? 0 : ID_mem_to_reg;
     ID_EX_pc_to_reg <= reset ? 0 : ID_pc_to_reg;
-    ID_EX_alu_op <= reset ? 0 : ID_alu_op;
-    ID_EX_is_jalr <= reset ? 0 : ID_is_jalr;
-    ID_EX_current_pc <= reset ? 0 : IF_ID_current_pc;
-    ID_EX_rs1_dout <= reset ? 0 : ID_rs1_dout_rf;
-    ID_EX_rs2_dout <= reset ? 0 : ID_rs2_dout_rf;
     ID_EX_inst <= reset ? 0 : IF_ID_inst;
-    ID_EX_immediate <= reset ? 0 : ID_immediate;
-    ID_EX_is_halted <= reset ? 0 : ID_is_halted;
-    ID_EX_is_control_hazard <= reset ? 0 : ID_is_control_hazard;
+    ID_EX_current_pc <= reset ? 0 : IF_ID_current_pc;
+    ID_EX_branch_target <= reset ? 0 : ID_branch_target;
+    ID_EX_rs1_dout <= reset ? 0 : ID_rs1_dout;
+    ID_EX_rs2_dout <= reset ? 0 : ID_rs2_dout;
+    ID_EX_imm <= reset ? 0 : ID_imm;
   end
+
+  // EX stage wire declarations
+  wire [3:0] EX_alu_ctrl;
+  wire [31:0] EX_alu_in_2;
+  wire [31:0] EX_alu_result;
+
+  // EX/MEM stage pipeline register declarations
+  reg EX_MEM_mem_read;
+  reg EX_MEM_mem_write;
+  reg EX_MEM_reg_write;
+  reg EX_MEM_mem_to_reg;
+  reg EX_MEM_pc_to_reg;
+  reg EX_MEM_is_halted;
+  reg [31:0] EX_MEM_inst;
+  reg [31:0] EX_MEM_rs2_dout;
+  reg [31:0] EX_MEM_current_pc;
+  reg [31:0] EX_MEM_alu_result;
 
   // EX stage module instantiations
   ALU alu(
     .alu_ctrl(EX_alu_ctrl),
-    .alu_in_1(EX_alu_in_1),
+    .alu_in_1(ID_EX_rs1_dout),
     .alu_in_2(EX_alu_in_2),
     .alu_result(EX_alu_result)
   );
@@ -266,55 +284,35 @@ module cpu(
     .alu_ctrl(EX_alu_ctrl)
   );
 
-  ForwardingUnit forwarding_unit(
-    .ID_rs1(ID_rs1),
-    .ID_rs2(IF_ID_inst[24:20]),
-    .EX_rs1(ID_EX_inst[19:15]),
-    .EX_rs2(ID_EX_inst[24:20]),
-    .EX_rd(ID_EX_inst[11:7]),
-    .MEM_rd(EX_MEM_inst[11:7]),
-    .WB_rd(MEM_WB_inst[11:7]),
-    .EX_reg_write(ID_EX_reg_write),
-    .MEM_reg_write(EX_MEM_reg_write),
-    .WB_reg_write(MEM_WB_reg_write),
-    .ID_forward_1(ID_forward_1),
-    .ID_forward_2(ID_forward_2),
-    .EX_forward_1(EX_forward_1),
-    .EX_forward_2(EX_forward_2)
-  );
-
   // EX stage combinational logics
-  assign EX_alu_in_2 = ID_EX_alu_src ? ID_EX_immediate : EX_rs2_dout;
+  assign EX_alu_in_2 = ID_EX_alu_src ? ID_EX_imm : ID_EX_rs2_dout; 
 
-  always @(*) begin
-    case(EX_forward_1)
-    2'b00: EX_alu_in_1 = ID_EX_rs1_dout;
-    2'b01: EX_alu_in_1 = WB_din;
-    2'b10: EX_alu_in_1 = EX_MEM_alu_result;
-    default: EX_alu_in_1 = 0;
-    endcase
-    
-    case(EX_forward_2)
-    2'b00: EX_rs2_dout = ID_EX_rs2_dout;
-    2'b01: EX_rs2_dout = WB_din;
-    2'b10: EX_rs2_dout = EX_MEM_alu_result;
-    default: EX_rs2_dout = 0;
-    endcase
-  end
-
-  // EX/MEM stage pipeline registers updates
+  // EX/MEM stage pipeline register updates
   always @(posedge clk) begin
-    EX_MEM_reg_write <= reset ? 0 : ID_EX_reg_write;
     EX_MEM_mem_read <= reset ? 0 : ID_EX_mem_read;
     EX_MEM_mem_write <= reset ? 0 : ID_EX_mem_write;
+    EX_MEM_reg_write <= reset ? 0 : ID_EX_reg_write;
     EX_MEM_mem_to_reg <= reset ? 0 : ID_EX_mem_to_reg;
     EX_MEM_pc_to_reg <= reset ? 0 : ID_EX_pc_to_reg;
-    EX_MEM_alu_result <= reset ? 0 : EX_alu_result;
-    EX_MEM_current_pc <= reset ? 0 : ID_EX_current_pc;
-    EX_MEM_rs2_dout <= reset ? 0 : EX_rs2_dout;
-    EX_MEM_inst <= reset ? 0 : ID_EX_inst;
     EX_MEM_is_halted <= reset ? 0 : ID_EX_is_halted;
+    EX_MEM_inst <= reset ? 0 : ID_EX_inst;
+    EX_MEM_rs2_dout <= reset ? 0 : ID_EX_rs2_dout;
+    EX_MEM_current_pc <= reset ? 0 : ID_EX_current_pc;
+    EX_MEM_alu_result <= reset ? 0 : EX_alu_result;
   end
+
+  // MEM stage wire declarations
+  wire [31:0] MEM_dout;
+
+  // MEM/WB stage pipeline register declarations
+  reg MEM_WB_reg_write;
+  reg MEM_WB_mem_to_reg;
+  reg MEM_WB_pc_to_reg;
+  reg MEM_WB_is_halted;
+  reg [31:0] MEM_WB_inst;
+  reg [31:0] MEM_WB_dout;
+  reg [31:0] MEM_WB_alu_result;
+  reg [31:0] MEM_WB_current_pc;
 
   // MEM stage module instantiations
   DataMemory data_memory(
@@ -327,21 +325,30 @@ module cpu(
     .dout(MEM_dout)
   );
 
-  // MEM/WB stage pipeline registers updates
+  // MEM/WB stage pipeline register declarations
   always @(posedge clk) begin
     MEM_WB_reg_write <= reset ? 0 : EX_MEM_reg_write;
     MEM_WB_mem_to_reg <= reset ? 0 : EX_MEM_mem_to_reg;
     MEM_WB_pc_to_reg <= reset ? 0 : EX_MEM_pc_to_reg;
+    MEM_WB_is_halted <= reset ? 0 : EX_MEM_is_halted;
+    MEM_WB_inst <= reset ? 0 : EX_MEM_inst;
     MEM_WB_dout <= reset ? 0 : MEM_dout;
     MEM_WB_alu_result <= reset ? 0 : EX_MEM_alu_result;
     MEM_WB_current_pc <= reset ? 0 : EX_MEM_current_pc;
-    MEM_WB_inst <= reset ? 0 : EX_MEM_inst;
-    MEM_WB_is_halted <= reset ? 0 : EX_MEM_is_halted;
-    is_halted <= reset ? 0 : MEM_WB_is_halted;
   end
 
-  // WB stage combinational logics
-  assign WB_din = 
-      MEM_WB_pc_to_reg ? (MEM_WB_current_pc + 4) : 
-        (MEM_WB_mem_to_reg ? MEM_WB_dout : MEM_WB_alu_result);
+  // WB stage wire declarations
+  reg [31:0] WB_din;
+
+  // WB combinational logics
+  assign is_halted = MEM_WB_is_halted;
+
+  always @(*) begin
+    if(MEM_WB_pc_to_reg)
+      WB_din = MEM_WB_current_pc + 4;
+    else if(MEM_WB_mem_to_reg)
+      WB_din = MEM_WB_dout;
+    else
+      WB_din = MEM_WB_alu_result;
+  end
 endmodule
