@@ -63,7 +63,7 @@ module cpu(
   // IF stage combinational logics
   assign IF_next_pc = ID_is_correct ? IF_predicted_pc : ID_next_pc;
   assign IF_pc_write = !IF_is_stall;
-  assign IF_is_stall = ID_is_data_hazard;
+  assign IF_is_stall = ID_is_data_hazard || (ID_is_jalr && !ID_EX_is_jalr);
   assign IF_is_flush = ID_is_control_hazard;
 
   // IF/ID stage pipeline register updates
@@ -102,12 +102,12 @@ module cpu(
   wire [1:0] ID_forward_2;
   wire [4:0] ID_rs1;
   wire [31:0] ID_imm;
-  wire [31:0] ID_next_pc;
-  reg  [31:0] ID_rs1_dout;
-  reg  [31:0] ID_rs2_dout;
   wire [31:0] ID_rs1_dout_rf;
   wire [31:0] ID_rs2_dout_rf;
   wire [31:0] ID_branch_target;
+  reg [31:0] ID_next_pc;
+  reg [31:0] ID_rs1_dout;
+  reg [31:0] ID_rs2_dout;
 
   // ID/EX stage pipeline register declarations
   reg ID_EX_alu_src;
@@ -191,9 +191,6 @@ module cpu(
     .forward_2(ID_forward_2)
   );
 
-  // Notice that the newer version of BranchPreFetcher doesn't take is_branch
-  // as input. That is, you must check if current ID instruction is branch
-  // instruction or not before using the bcond signal.
   BranchPreFetcher branch_prefetcher(
     .btype(IF_ID_inst[14:12]),
     .rs1_dout(ID_rs1_dout),
@@ -202,29 +199,39 @@ module cpu(
   );
 
   // ID stage combinational logics
-  assign ID_is_stall = ID_is_data_hazard;
+  assign ID_is_stall = ID_is_data_hazard || (ID_is_jalr && !ID_EX_is_jalr);
   assign ID_is_taken = ID_is_jal || ID_is_jalr || ID_is_branch && ID_bcond; 
   assign ID_rs1 = ID_is_ecall ? 17 : IF_ID_inst[19:15];
   assign ID_branch_target = IF_ID_current_pc + ID_imm; 
   assign ID_is_correct = !(IF_ID_prediction ^ ID_is_taken);
-  // What about JALR instructions?
-  assign ID_next_pc = (ID_is_jal || ID_is_branch && ID_bcond) ? 
-    ID_branch_target : IF_ID_current_pc + 4;
+
+  always @(*) begin
+    if(ID_EX_is_jalr)
+      ID_next_pc = EX_alu_result;
+    else if(ID_is_jal || ID_is_branch && ID_bcond)
+      ID_next_pc = ID_branch_target;
+    else
+      ID_next_pc = IF_ID_current_pc + 4;
+  end
 
   always @(*) begin
     case(ID_forward_1)
-    2'b11: ID_rs1_dout = EX_alu_result;
-    2'b10: ID_rs1_dout = EX_MEM_alu_result;
-    2'b01: ID_rs1_dout = WB_din;
     2'b00: ID_rs1_dout = ID_rs1_dout_rf;
+    2'b01: ID_rs1_dout = WB_din;
+    2'b10: ID_rs1_dout =
+      EX_MEM_pc_to_reg ? EX_MEM_current_pc + 4 : EX_MEM_alu_result;
+    2'b11: ID_rs1_dout = 
+      ID_EX_pc_to_reg ? ID_EX_current_pc + 4 : EX_alu_result;
     default: ID_rs1_dout = 0;
     endcase
 
     case(ID_forward_2)
-    2'b11: ID_rs2_dout = EX_alu_result;
-    2'b10: ID_rs2_dout = EX_MEM_alu_result;
-    2'b01: ID_rs2_dout = WB_din;
     2'b00: ID_rs2_dout = ID_rs2_dout_rf;
+    2'b01: ID_rs2_dout = WB_din;
+    2'b10: ID_rs2_dout = 
+      EX_MEM_pc_to_reg ? EX_MEM_current_pc + 4 : EX_MEM_alu_result;
+    2'b11: ID_rs2_dout = 
+      ID_EX_pc_to_reg ? ID_EX_current_pc + 4 : EX_alu_result;
     default: ID_rs2_dout = 0;
     endcase
   end
@@ -259,6 +266,8 @@ module cpu(
   wire [31:0] EX_alu_result;
 
   // EX/MEM stage pipeline register declarations
+  reg EX_MEM_is_jal;
+  reg EX_MEM_is_jalr;
   reg EX_MEM_mem_read;
   reg EX_MEM_mem_write;
   reg EX_MEM_reg_write;
@@ -289,6 +298,8 @@ module cpu(
 
   // EX/MEM stage pipeline register updates
   always @(posedge clk) begin
+    EX_MEM_is_jal <= reset ? 0 : ID_EX_is_jal;
+    EX_MEM_is_jalr <= reset ? 0 : ID_EX_is_jalr;
     EX_MEM_mem_read <= reset ? 0 : ID_EX_mem_read;
     EX_MEM_mem_write <= reset ? 0 : ID_EX_mem_write;
     EX_MEM_reg_write <= reset ? 0 : ID_EX_reg_write;
@@ -305,6 +316,8 @@ module cpu(
   wire [31:0] MEM_dout;
 
   // MEM/WB stage pipeline register declarations
+  reg MEM_WB_is_jal;
+  reg MEM_WB_is_jalr;
   reg MEM_WB_reg_write;
   reg MEM_WB_mem_to_reg;
   reg MEM_WB_pc_to_reg;
@@ -327,6 +340,8 @@ module cpu(
 
   // MEM/WB stage pipeline register declarations
   always @(posedge clk) begin
+    MEM_WB_is_jal <= reset ? 0 : EX_MEM_is_jal;
+    MEM_WB_is_jalr <= reset ? 0 : EX_MEM_is_jalr;
     MEM_WB_reg_write <= reset ? 0 : EX_MEM_reg_write;
     MEM_WB_mem_to_reg <= reset ? 0 : EX_MEM_mem_to_reg;
     MEM_WB_pc_to_reg <= reset ? 0 : EX_MEM_pc_to_reg;
@@ -341,8 +356,6 @@ module cpu(
   reg [31:0] WB_din;
 
   // WB combinational logics
-  assign is_halted = MEM_WB_is_halted;
-
   always @(*) begin
     if(MEM_WB_pc_to_reg)
       WB_din = MEM_WB_current_pc + 4;
@@ -350,5 +363,10 @@ module cpu(
       WB_din = MEM_WB_dout;
     else
       WB_din = MEM_WB_alu_result;
+  end
+
+  // WB sequential logics
+  always @(posedge clk) begin
+    is_halted <= reset ? 0 : MEM_WB_is_halted;
   end
 endmodule

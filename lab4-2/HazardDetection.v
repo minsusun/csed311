@@ -33,7 +33,7 @@ module HazardDetection (
   wire is_data_hazard_from_MEM = 
     ((ID_rs1 == MEM_rd) && use_rs1 || (ID_rs2 == MEM_rd) && use_rs2)
       && MEM_mem_read;
-
+  
   assign is_data_hazard = is_data_hazard_from_EX || is_data_hazard_from_MEM;
   assign is_control_hazard = 
     (prediction ^ (is_jalr || is_jal || (is_branch && bcond)));
