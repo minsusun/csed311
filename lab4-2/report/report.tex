@@ -69,7 +69,7 @@ Data hazard가 발생하는 경우에는 Hazard Detection Module을 통해서 Ha
 {
     \begin{figure}[!h]
         \centering
-        \includegraphics[width=\textwidth]{}
+        \includegraphics[width=\textwidth]{img/2bit_saturation_counter_FSM_diagram.png}
         \caption{Design of Pipelined CPU}
     \end{figure}
 }
@@ -116,293 +116,182 @@ Pipelined CPU의 Control Flow Data Path에 관여하는 세부 모듈들과 각�
 
 \section{Implementation}
 
-\subsection{Program Counter}
+아래 명시되지 않은 모듈은 기존 4-1의 내용과 동일하다. \\
 
-\begin{figure}[h]
+\subsection{Branch Predictor}
+
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
-always @(posedge clk) begin
-    if(reset) 
-        current_pc <= 0;
-    else if(pc_write)
-        current_pc <= next_pc;
-end
-    \end{minted}    
-    \caption{PC.v}
-\end{longlisting}
-\end{figure}
+  always @(posedge clk) begin
+    if(reset) begin
+      for(i = 0; i < ENTRY_NUMBER; i = i + 1) begin
+        branch_target_buffer[i] <= 0;
+        pattern_history_table[i] <= `BP_SN;
+        tag_table[i] <= 0;
+      end
+    end else if(is_control_flow && is_exist) begin
+      branch_target_buffer[idx_to_update] <= branch_target;
+      
+      case(pattern_history_table[idx_to_update])
+      `BP_ST:
+        pattern_history_table[idx_to_update] <= (is_correct ? `BP_ST : `BP_WT);
+      `BP_WT: 
+        pattern_history_table[idx_to_update] <= (is_correct ? `BP_ST : `BP_WN);
+      `BP_WN: 
+        pattern_history_table[idx_to_update] <= (is_correct ? `BP_SN : `BP_WT);
+      `BP_SN: 
+        pattern_history_table[idx_to_update] <= (is_correct ? `BP_SN : `BP_WN);
+      default:
+        pattern_history_table[idx_to_update] <= `BP_SN;
+      endcase
+    end else if(is_control_flow && !is_exist) begin
+      branch_target_buffer[idx_to_update] <= branch_target;
+      tag_table[idx_to_update] <= new_tag;
+      pattern_history_table[idx_to_update] <= `BP_SN;
+    end
+  end
 
-Program Counter는 주어진 clk에 따라서 current_pc를 next_pc로 업데이트하는 Synchronous 모듈이다. \\
+  wire [INDEX_LENGTH - 1: 0] index = current_pc[INDEX_LENGTH + 1: 2];
+  wire [TAG_LENGTH - 1: 0] tag = current_pc[31: 32 - TAG_LENGTH];
+  wire is_match = (tag_table[index] == tag);
+  wire is_taken = pattern_history_table[index][1];
+
+  assign prediction = is_match && is_taken;
+  assign predicted_pc = 
+    prediction ? branch_target_buffer[index] : (current_pc + 4);
+    \end{minted}
+    \caption{BranchPredict.v}
+\end{longlisting}
+
+본 과제에서 구현한 Branch Predictor는 2-Bit Saturation Counter를 기반으로 한 Global Branch Predictor이다.
+32 Entry를 가지는 PHT와 BTB를 이용하여 구현하였으며, clk 신호에 맞추어 업데이트되는 Synchronous 모듈이다. \\
+
+\subsection{Branch Pre-Fetch}
+
+\begin{longlisting}
+    \begin{minted}[fontsize=\footnotesize]{Verilog}
+always @(*) begin
+    case(btype)
+        `FUNCT3_BEQ: bcond = (rs1_dout == rs2_dout);
+        `FUNCT3_BNE: bcond = (rs1_dout != rs2_dout);
+        `FUNCT3_BLT: bcond = (rs1_dout  < rs2_dout);
+        `FUNCT3_BGE: bcond = (rs1_dout >= rs2_dout);
+        default: bcond = 0;
+    endcase
+end
+    \end{minted}
+    \caption{BranchPreFetcher.v}
+\end{longlisting}
+
+Branch Pre-Fetch 모듈은 기존의 Pipelined CPU에서 Branch Condition을 계산하는 부분을 MEM Stage에서 ID Stage로 옮겨온 모듈이다.
+기존의 Branch Condition 계산과 동일한 메커니즘이 사용되며, Asynchronous한 모듈이다. \\
+
+\subsection{PC Generator}
+
+\begin{longlisting}
+    \begin{minted}[fontsize=\footnotesize]{Verilog}
+assign next_pc = PC + shifted_imm;
+assign shifted_imm = imm << 2;
+    \end{minted}
+    \caption{PCGenerator.v}
+\end{longlisting}
+
+기존 4-1에서 구현하였던 Pipelined CPU에서는 immediate 값과 Program Counter 값을 합산해주는 모듈이 구현되지 않았다.
+기존의 Schematic에서는 해당 모듈이 EX Stage에 존재하였으나 ID Stage로 옮겨서 구현하였으며, Asynchronous한 모듈이다. \\
 
 \subsection{Control Unit}
 
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
-always @(*) begin
-    mem_read = (opcode == `LOAD);
-    mem_to_reg = (opcode == `LOAD);
-    mem_write = (opcode == `STORE) && (!is_hazard);
-    alu_src = (opcode != `ARITHMETIC) && (opcode != `BRANCH);
-    write_enable = (opcode != `STORE) && (opcode != `BRANCH) && (!is_hazard);
-    alu_op = {
-        (opcode == `ARITHMETIC) || 
-        (opcode == `ARITHMETIC_IMM) || 
-        (opcode == `BRANCH),
-        1'b0
-    };
-    is_ecall = (opcode == `ECALL);
-end
+    wire [6:0] opcode = inst[6:0];
+
+    wire is_arith = (opcode == `ARITHMETIC);
+    wire is_arith_imm = (opcode == `ARITHMETIC_IMM);
+    wire is_load = (opcode == `LOAD);
+    wire is_store = (opcode == `STORE);
+
+    assign reg_write = !is_store && !is_branch;
+    assign alu_src = !is_arith && !is_branch;
+    assign mem_read = is_load;
+    assign mem_write = is_store;
+    assign mem_to_reg = is_load;
+    assign pc_to_reg = is_jal || is_jalr;
+    assign alu_op[0] = 1'b0;
+    assign alu_op[1] = !is_load && !is_store && !is_jalr;
+    assign is_jalr = (opcode == `JALR);
+    assign is_jal = (opcode == `JAL);
+    assign is_branch = (opcode == `BRANCH);
+    assign is_ecall = (opcode == `ECALL);
     \end{minted}
     \caption{ControlUnit.v}
 \end{longlisting}
 
 Control Unit은 주어진 instruction에서 opcode에 따라 필요한 Control Value를 계산하여 산출하는 Asynchronous 모듈이다. \\
 
-\subsection{ALU Control Unit}
-
-\begin{longlisting}
-    \begin{minted}[fontsize=\footnotesize]{Verilog}
-always @(*) begin
-    case(aluOp)
-        2'b00: alu_op = `ALU_ADD;
-        2'b01: alu_op = `ALU_SUB;
-        default: begin
-            case(instruction[6:0])
-                `ARITHMETIC: begin
-                    case(instruction[14:12])
-                        `FUNCT3_ADD: alu_op = (instruction[30]) ? `ALU_SUB : `ALU_ADD;
-                        `FUNCT3_SLL: alu_op = `ALU_SLL;
-                        `FUNCT3_SRL: alu_op = `ALU_SLR;
-                        `FUNCT3_AND: alu_op = `ALU_AND;
-                        `FUNCT3_OR:  alu_op = `ALU_OR;
-                        `FUNCT3_XOR: alu_op = `ALU_XOR;
-                        default:     alu_op = 4'b0;
-                    endcase
-                end
-                `ARITHMETIC_IMM: begin
-                    case(instruction[14:12])
-                        `FUNCT3_ADD: alu_op = `ALU_ADD;
-                        `FUNCT3_SLL: alu_op = `ALU_SLL;
-                        `FUNCT3_SRL: alu_op = `ALU_SLR;
-                        `FUNCT3_AND: alu_op = `ALU_AND;
-                        `FUNCT3_OR:  alu_op = `ALU_OR;
-                        `FUNCT3_XOR: alu_op = `ALU_XOR;
-                        default:     alu_op = 4'b0;
-                    endcase
-                end
-                `BRANCH: begin
-                    case(instruction[14:12])
-                        `FUNCT3_BEQ: alu_op = `ALU_BEQ;
-                        `FUNCT3_BNE: alu_op = `ALU_BNE;
-                        `FUNCT3_BLT: alu_op = `ALU_BLT;
-                        `FUNCT3_BGE: alu_op = `ALU_BGE;
-                        default:     alu_op = 4'b0;
-                    endcase
-                end
-                `LOAD:   alu_op = `ALU_ADD;
-                `STORE:  alu_op = `ALU_ADD;
-                `JAL:    alu_op = `ALU_ADD;
-                `JALR:   alu_op = `ALU_ADD;
-                `ECALL:  alu_op = `ALU_BEQ;
-                default: alu_op = 4'b0;
-            endcase
-        end
-    endcase
-end
-    \end{minted}
-    \caption{ALUControlUnit.v}
-\end{longlisting}
-
-ALU Control Unit은 주어진 funct3, funct7, opcode를 이용해 alu_op 신호를 생성하는 Asynchronous 모듈이다. \\
-
-\subsection{Immediate Generator}
-
-\begin{longlisting}
-    \begin{minted}[fontsize=\footnotesize]{Verilog}
-always @(*) begin
-    case(opcode)
-    `ARITHMETIC_IMM: imm_gen_out = {{20{part_of_inst[31]}}, part_of_inst[31:20]};
-    `LOAD          : imm_gen_out = {{20{part_of_inst[31]}}, part_of_inst[31:20]};
-
-    `STORE: begin
-      imm_gen_out = {{20{part_of_inst[31]}}, part_of_inst[31:25], part_of_inst[11:7]};
-    end
-
-    `BRANCH: begin
-      imm_gen_out = {
-        {19{part_of_inst[31]}},
-        part_of_inst[31],
-        part_of_inst[7],
-        part_of_inst[30:25],
-        part_of_inst[11:8],
-        1'b0
-      };
-    end
-
-    `JAL: begin
-      imm_gen_out = {
-        {11{part_of_inst[31]}},
-        part_of_inst[31],
-        part_of_inst[19:12],
-        part_of_inst[20],
-        part_of_inst[30:21],
-        1'b0
-      };
-    end
-
-    `JALR  : imm_gen_out = {{20{part_of_inst[31]}}, part_of_inst[31:20]};
-    `LUI   : imm_gen_out = {part_of_inst[31:12], 12'b0};
-    `AUIPC : imm_gen_out = {part_of_inst[31:12], 12'b0};
-    default: imm_gen_out = {32{1'b0}};
-    endcase
-end
-    \end{minted}
-    \caption{ImmediateGenerator.v}
-\end{longlisting}
-
-Immediate Generator는 주어진 instruction의 opcode에 따라서 immediate value를 추출하는 Asynchronous 모듈이다. Immediate value가 필요하지 않을 경우 32'b0으로 출력한다. \\
-
-\subsection{ALU}
-
-\begin{longlisting}
-    \begin{minted}[fontsize=\footnotesize]{Verilog}
-always @(*) begin
-    case(alu_op)
-        `ALU_ADD: begin
-            alu_result = alu_in_1 + alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_SUB: begin
-            alu_result = alu_in_1 - alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_AND: begin
-            alu_result = alu_in_1 & alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_OR: begin
-            alu_result = alu_in_1 | alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_XOR: begin
-            alu_result = alu_in_1 ^ alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_SLL: begin
-            alu_result = alu_in_1 << alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_SLR: begin
-            alu_result = alu_in_1 >> alu_in_2;
-            alu_zero = 0;
-        end
-        `ALU_BEQ: begin
-            alu_result = 32'b0;
-            alu_zero = alu_in_1 == alu_in_2;
-        end
-        `ALU_BNE: begin
-            alu_result = 32'b0;
-            alu_zero = alu_in_1 != alu_in_2;
-        end
-        `ALU_BLT: begin
-            alu_result = 32'b0;
-            alu_zero = alu_in_1 < alu_in_2;
-        end
-        `ALU_BGE: begin
-            alu_result = 32'b0;
-            alu_zero = alu_in_1 >= alu_in_2;
-        end
-        default: begin
-            alu_result = 32'b0;
-            alu_zero = 0;
-        end
-    endcase
-end
-    \end{minted}
-    \caption{ALU.v}
-\end{longlisting}
-
-ALU는 주어진 opcode, funct3, funct7과 alu_in_1, alu_in_2에 따라 연산 결과값을 계산하는 Asynchronous 모듈로 구현하였다. 필요한 instruction의 경우에는 alu_result와 alu_bcond를 0으로 처리하였다. \\
-
 \subsection{Hazard Detection Module}
 
 \begin{longlisting}
 \begin{minted}[fontsize=\footnotesize]{Verilog}
-wire [6:0] ID_opcode = ID_inst[6:0];
-wire is_ecall = (ID_opcode == `ECALL);
-wire [4:0] ID_rs1 = is_ecall ? 17 : ID_inst[19:15];
-wire [4:0] ID_rs2 = ID_inst[24:20];
+  wire is_arith = (ID_opcode == `ARITHMETIC);
+  wire is_store = (ID_opcode == `STORE);
+  wire is_branch = (ID_opcode == `BRANCH);
+  wire is_lui = (ID_opcode == `LUI);
+  wire is_auipc = (ID_opcode == `AUIPC);
+  wire is_jal = (ID_opcode == `JAL);
+  wire is_jalr = (ID_opcode == `JALR);
+  wire is_rs1_zero = (ID_rs1 == 5'b0);
+  wire is_rs2_zero = (ID_rs2 == 5'b0);
 
-wire use_rs1 = (
-    (ID_opcode != `LUI) || (ID_opcode != `AUIPC) || (ID_opcode != `JAL)
-) && ID_rs1 != 5'b0; 
+  wire use_rs1 = (!is_lui || !is_auipc || !is_jal) && !is_rs1_zero;
+  wire use_rs2 = (is_arith || is_store || is_branch) && !is_rs2_zero;
 
-wire use_rs2 = (
-    (ID_opcode == `ARITHMETIC) || (ID_opcode == `STORE) ||
-    (ID_opcode == `BRANCH)
-) && ID_rs2 != 5'b0;
+  wire is_data_hazard_from_EX = 
+    ((ID_rs1 == EX_rd) && use_rs1 || (ID_rs2 == EX_rd) && use_rs2) 
+      && EX_mem_read;
 
-assign is_hazard = (
-    (ID_rs1 == EX_rd) && use_rs1 || (ID_rs2 == EX_rd) && use_rs2 
-) && EX_mem_read;
+  wire is_data_hazard_from_MEM = 
+    ((ID_rs1 == MEM_rd) && use_rs1 || (ID_rs2 == MEM_rd) && use_rs2)
+      && MEM_mem_read;
+  
+  assign is_data_hazard = is_data_hazard_from_EX || is_data_hazard_from_MEM;
+  assign is_control_hazard = 
+    (prediction ^ (is_jalr || is_jal || (is_branch && bcond)));
 \end{minted}
 \caption{HazardDetection.v}
 \end{longlisting}
 
-Hazard Detection Module은 현재 Data Hazard가 발생하여 다른 Stage의 실행이 완료될 때까지 기다려야 되는 경우를 판단하는 모듈이다. Instruction의 종류와 사용되는 Register의 종류를 판단하여 \code{is_hazard} 신호를 통해 이를 알리는 비동기 회로이다.
+Hazard Detection Module은 현재 Hazard가 발생되어 현재 Pipeline에서의 stall을 발생시켜야 하는지 여부에 대해 판단하는 모듈이다.
+주어진 Instruction과 사용되는 레지스터, Branch Predictor의 Prediction을 이용하여 Hazard를 판단하고 이를 출력하는 비동기 회로이다. \\
 
 \subsection{Forwarding Unit}
 
-Forwarding Unit은 교재에서 제시하고 있는 기준 그대로 Signal을 지정하여 구현하였다. 사용된 Signal의 상세 내용은 아래의 그림과 같다.
-
-\begin{figure}[!h]
-    \centering
-    \includegraphics[width=\linewidth]{img/forwarding-unit-signals.png}
-    \caption{Forwarding Unit Signals Specification}
-\end{figure}
-
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
-wire [6:0] ID_opcode = ID_inst[6:0];
-wire is_ecall = (ID_opcode == `ECALL);
-wire [4:0] ID_rs1 = is_ecall ? 17 : ID_inst[19:15];
-wire [4:0] ID_rs2 = ID_inst[24:20];
-
-wire use_rs1 = (
-    (ID_opcode != `LUI) || (ID_opcode != `AUIPC) || (ID_opcode != `JAL)
-) && ID_rs1 != 5'b0; 
-
-wire use_rs2 = (
-    (ID_opcode == `ARITHMETIC) || (ID_opcode == `STORE) ||
-    (ID_opcode == `BRANCH)
-) && ID_rs2 != 5'b0;
-
-assign is_hazard = (
-    (ID_rs1 == EX_rd) && use_rs1 || (ID_rs2 == EX_rd) && use_rs2 
-) && EX_mem_read;
-
-always @(*) begin
-    if(is_ecall && (EX_rd == 17))
-        forward_1 = 2'b11;
-    else if((EX_rs1 != 5'b0) && (EX_rs1 == MEM_rd) && MEM_reg_write)
-        forward_1 = 2'b10;
-    else if((EX_rs1 != 5'b0) && (EX_rs1 == WB_rd) && WB_reg_write)
-        forward_1 = 2'b01;
+  always @(*) begin
+    if((ID_rs1 != 0) && (ID_rs1 == EX_rd) && EX_reg_write)
+      forward_1 = 2'b11;
+    else if((ID_rs1 != 0) && (ID_rs1 == MEM_rd) && MEM_reg_write)
+      forward_1 = 2'b10;
+    else if((ID_rs1 != 0) && (ID_rs1 == WB_rd) && WB_reg_write)
+      forward_1 = 2'b01;
     else
-        forward_1 = 2'b00;
+      forward_1 = 2'b00;
 
-    if((EX_rs2 != 5'b0) && (EX_rs2 == MEM_rd) && MEM_reg_write)
-        forward_2 = 2'b10;
-    else if((EX_rs2 != 5'b0) && (EX_rs2 == WB_rd) && WB_reg_write)
-        forward_2 = 2'b01;
+    if((ID_rs2 != 0) && (ID_rs2 == EX_rd) && EX_reg_write)
+      forward_2 = 2'b11;
+    else if((ID_rs2 != 0) && (ID_rs2 == MEM_rd) && MEM_reg_write)
+      forward_2 = 2'b10;
+    else if((ID_rs2 != 0) && (ID_rs2 == WB_rd) && WB_reg_write)
+      forward_2 = 2'b01;
     else
-        forward_2 = 2'b00;
-end
+      forward_2 = 2'b00;
+  end
     \end{minted}
     \caption{ForwardingUnit.v}
 \end{longlisting}
 
-Forwarding Unit은 현재 ALU에서 사용되어야할 피연산자들이 앞선 EX, MEM, WB Stage 등에서 사용되어 있는지를 판단하고 사용할 수 있을 경우 사전 정의된 \code{ForwardA}, \code{ForwardB}를 통해서 알리는 모듈이다. 주어진 Instruction을 이용하여 Signal을 생성하는 Asynchronous 모듈로 구현하였다. \\
+Forwarding Unit은 현재 ALU에서 사용되어야할 피연산자들이 앞선 EX, MEM, WB Stage 등에서 사용되어 있는지를 판단하고 사용할 수 있을 경우 사전 정의된 \code{forward_1}, \code{forward_2}를 통해서 알리는 모듈이다.
+주어진 Instruction을 이용하여 Signal을 생성하는 Asynchronous 모듈로 구현하였다. \\
 
 \subsection{CPU}
 
@@ -410,152 +299,135 @@ Forwarding Unit은 현재 ALU에서 사용되어야할 피연산자들이 앞선
 
 \begin{longlisting}
     \begin{minted}[fontsize=\footnotesize]{Verilog}
-  // Update IF/ID pipeline registers here
-  always @(posedge clk) begin
-    if (reset) begin
-      IF_ID_inst <= 32'b0;
-    end
-    else if (!ID_is_hazard) begin
-      IF_ID_inst <= IF_inst;
-    end
-  end
+  // IF stage combinational logics
+  assign IF_next_pc = ID_is_correct ? IF_predicted_pc : ID_next_pc;
+  assign IF_pc_write = !IF_is_stall;
+  assign IF_is_stall = ID_is_data_hazard || (ID_is_jalr && !ID_EX_is_jalr);
+  assign IF_is_flush = ID_is_control_hazard;
 
-  // Update ID/EX pipeline registers here
+  // IF/ID stage pipeline register updates
+  // IF_is_flush must passed until ID stage, and if current instruction in 
+  // ID stage's is_flush is asserted, its mem_write and reg_write must be 
+  // de-asserted.
   always @(posedge clk) begin
-    if (reset) begin
-      ID_EX_alu_op <= 0;
-      ID_EX_alu_src <= 0;
-      ID_EX_mem_write <= 0;
-      ID_EX_mem_read <= 0;
-      ID_EX_mem_to_reg <= 0;
-      ID_EX_reg_write <= 0;
-      ID_EX_rs1_data <= 32'b0;
-      ID_EX_rs2_data <= 32'b0;
-      ID_EX_imm <= 32'b0;
-      ID_EX_ALU_ctrl_unit_input <= 0;
-      ID_EX_rs1 <= 5'b0;
-      ID_EX_rs2 <= 5'b0;
-      ID_EX_rd <= 5'b0;
-      ID_EX_is_halted <= 0;
-    end
-    else begin
-      ID_EX_alu_op <= ID_alu_op;
-      ID_EX_alu_src <= ID_alu_src;
-      ID_EX_mem_write <= ID_mem_write;
-      ID_EX_mem_read <= ID_mem_read;
-      ID_EX_mem_to_reg <= ID_mem_to_reg;
-      ID_EX_reg_write <= ID_reg_write;
-      ID_EX_rs1_data <= ID_rs1_data;
-      ID_EX_rs2_data <= ID_rs2_data;
-      ID_EX_imm <= ID_imm;
-      ID_EX_ALU_ctrl_unit_input <= ID_ALU_ctrl_unit_input;
-      ID_EX_rs1 <= ID_rs1;
-      ID_EX_rs2 <= ID_rs2;
-      ID_EX_rd <= ID_rd;
-      ID_EX_is_halted <= ID_is_halted;
+    if(!IF_is_stall) begin
+      IF_ID_is_flush <= reset ? 0 : IF_is_flush;
+      IF_ID_prediction <= reset ? 0 : IF_prediction;
+      IF_ID_current_pc <= reset ? 0 : IF_current_pc;
+      IF_ID_predicted_pc <= reset ? 0 : IF_predicted_pc;
+      IF_ID_inst <= reset ? 0 : IF_inst;
     end
   end
   
-  // Update EX/MEM pipeline registers here
-  always @(posedge clk) begin
-    if (reset) begin
-      EX_MEM_mem_write <= 0;
-      EX_MEM_mem_read <= 0;
-      EX_MEM_is_branch <= 0;
-      EX_MEM_mem_to_reg <= 0;
-      EX_MEM_reg_write <= 0;
-      EX_MEM_alu_out <= 32'b0;
-      EX_MEM_dmem_data <= 32'b0;
-      EX_MEM_rd <= 5'b0;
-      EX_MEM_is_halted <= 0;
-    end
-    else begin
-      EX_MEM_mem_write <= EX_mem_write;
-      EX_MEM_mem_read <= EX_mem_read;
-      EX_MEM_is_branch <= EX_is_branch;
-      EX_MEM_mem_to_reg <= EX_mem_to_reg;
-      EX_MEM_reg_write <= EX_reg_write;
-      EX_MEM_alu_out <= EX_alu_out;
-      EX_MEM_dmem_data <= EX_dmem_data;
-      EX_MEM_rd <= EX_rd;
-      EX_MEM_is_halted <= EX_is_halted;
-    end
-  end
-
-  // Update MEM/WB pipeline registers here
-  always @(posedge clk) begin
-    if (reset) begin
-      MEM_WB_mem_to_reg <= 0;
-      MEM_WB_reg_write <= 0;
-      MEM_WB_mem_to_reg_src_1 <= 32'b0;
-      MEM_WB_mem_to_reg_src_2 <= 32'b0;
-      MEM_WB_is_halted <= 0;
-    end
-    else begin
-      MEM_WB_mem_to_reg <= MEM_mem_to_reg;
-      MEM_WB_reg_write <= MEM_reg_write;
-      MEM_WB_mem_to_reg_src_1 <= MEM_mem_to_reg_src_1;
-      MEM_WB_mem_to_reg_src_2 <= MEM_mem_to_reg_src_2;
-      MEM_WB_rd <= MEM_rd;
-      MEM_WB_is_halted <= MEM_is_halted;
-    end
-  end
-
-  always @(posedge clk) begin
-    is_halted <= MEM_WB_is_halted;
-  end
-
-  always @(*) begin
-    case(EX_forward_1)
-    2'b00: EX_ALU_in_1 = ID_EX_rs1_data;
-    2'b01: EX_ALU_in_1 = WB_rdin_data;
-    2'b10: EX_ALU_in_1 = EX_MEM_alu_out;
-    default: EX_ALU_in_1 = ID_EX_rs1_data;
-    endcase
-    
-    case(EX_forward_2)
-    2'b00: EX_ALU_rs2_data = ID_EX_rs2_data;
-    2'b01: EX_ALU_rs2_data = WB_rdin_data;
-    2'b10: EX_ALU_rs2_data = EX_MEM_alu_out;
-    default: EX_ALU_rs2_data = ID_EX_rs2_data;
-    endcase
-  end
-
-  always @(*) begin
-    if(EX_forward_1 == 3)
-      ID_ecall_comp = EX_alu_out;
-    else
-      ID_ecall_comp = ID_rs1_data;
-  end
-
-  assign next_pc = current_pc + 4;
-  
-  assign ID_PC = IF_ID_PC;
-  assign ID_ALU_ctrl_unit_input = IF_ID_inst;
-  assign ID_rd = IF_ID_inst[11: 7];
+  // ID stage combinational logics
+  assign ID_is_stall = ID_is_data_hazard || (ID_is_jalr && !ID_EX_is_jalr);
+  assign ID_is_taken = ID_is_jal || ID_is_jalr || ID_is_branch && ID_bcond; 
   assign ID_rs1 = ID_is_ecall ? 17 : IF_ID_inst[19:15];
-  assign ID_rs2 = IF_ID_inst[24:20];
-  assign ID_is_halted = (ID_is_ecall && (ID_ecall_comp == 10));
-  
-  assign EX_ALU_in_2 = ID_EX_alu_src ? ID_EX_imm : EX_ALU_rs2_data;
-  assign EX_reg_write = ID_EX_reg_write;
-  assign EX_mem_to_reg = ID_EX_mem_to_reg;
-  assign EX_is_branch = ID_EX_is_branch;
-  assign EX_mem_read = ID_EX_mem_read;
-  assign EX_mem_write = ID_EX_mem_write;
-  assign EX_shifted_imm = ID_EX_imm << 2;
-  assign EX_rd = ID_EX_rd;
-  assign EX_is_halted = ID_EX_is_halted;
-  assign EX_dmem_data = EX_ALU_rs2_data;
-  
-  assign MEM_reg_write = EX_MEM_reg_write;
-  assign MEM_mem_to_reg = EX_MEM_mem_to_reg;
-  assign MEM_PCSrc = EX_MEM_is_branch & EX_MEM_alu_bcond;
-  assign MEM_mem_to_reg_src_2 = EX_MEM_alu_out;
-  assign MEM_rd = EX_MEM_rd;
-  assign MEM_is_halted = EX_MEM_is_halted;
-  
-  assign WB_rdin_data = (MEM_WB_mem_to_reg) ? MEM_WB_mem_to_reg_src_1 : MEM_WB_mem_to_reg_src_2;
+  assign ID_branch_target = IF_ID_current_pc + ID_imm; 
+  assign ID_is_correct = !(IF_ID_prediction ^ ID_is_taken);
+
+  always @(*) begin
+    if(ID_EX_is_jalr)
+      ID_next_pc = EX_alu_result;
+    else if(ID_is_jal || ID_is_branch && ID_bcond)
+      ID_next_pc = ID_branch_target;
+    else
+      ID_next_pc = IF_ID_current_pc + 4;
+  end
+
+  always @(*) begin
+    case(ID_forward_1)
+    2'b00: ID_rs1_dout = ID_rs1_dout_rf;
+    2'b01: ID_rs1_dout = WB_din;
+    2'b10: ID_rs1_dout =
+      EX_MEM_pc_to_reg ? EX_MEM_current_pc + 4 : EX_MEM_alu_result;
+    2'b11: ID_rs1_dout = 
+      ID_EX_pc_to_reg ? ID_EX_current_pc + 4 : EX_alu_result;
+    default: ID_rs1_dout = 0;
+    endcase
+
+    case(ID_forward_2)
+    2'b00: ID_rs2_dout = ID_rs2_dout_rf;
+    2'b01: ID_rs2_dout = WB_din;
+    2'b10: ID_rs2_dout = 
+      EX_MEM_pc_to_reg ? EX_MEM_current_pc + 4 : EX_MEM_alu_result;
+    2'b11: ID_rs2_dout = 
+      ID_EX_pc_to_reg ? ID_EX_current_pc + 4 : EX_alu_result;
+    default: ID_rs2_dout = 0;
+    endcase
+  end
+
+  // ID/EX stage pipeline register updates
+  always @(posedge clk) begin
+    ID_EX_alu_src <= reset ? 0 : ID_alu_src;
+    ID_EX_alu_op <= reset ? 0 : ID_alu_op;
+    ID_EX_mem_read <= reset ? 0 : ID_mem_read;
+    ID_EX_mem_write <= 
+      (reset || IF_ID_is_flush || ID_is_stall) ? 0 : ID_mem_write;
+    ID_EX_is_jalr <= reset ? 0 : ID_is_jalr;
+    ID_EX_is_jal <= reset ? 0 : ID_is_jal;
+    ID_EX_is_branch <= reset ? 0 : ID_is_branch;
+    ID_EX_is_correct <= reset ? 0 : ID_is_correct;
+    ID_EX_is_halted <= reset ? 0 : ID_is_ecall && (ID_rs1_dout == 10);
+    ID_EX_reg_write <= 
+      (reset || IF_ID_is_flush || ID_is_stall) ? 0 : ID_reg_write;
+    ID_EX_mem_to_reg <= reset ? 0 : ID_mem_to_reg;
+    ID_EX_pc_to_reg <= reset ? 0 : ID_pc_to_reg;
+    ID_EX_inst <= reset ? 0 : IF_ID_inst;
+    ID_EX_current_pc <= reset ? 0 : IF_ID_current_pc;
+    ID_EX_branch_target <= reset ? 0 : ID_branch_target;
+    ID_EX_rs1_dout <= reset ? 0 : ID_rs1_dout;
+    ID_EX_rs2_dout <= reset ? 0 : ID_rs2_dout;
+    ID_EX_imm <= reset ? 0 : ID_imm;
+  end
+
+  // EX stage combinational logics
+  assign EX_alu_in_2 = ID_EX_alu_src ? ID_EX_imm : ID_EX_rs2_dout; 
+
+  // EX/MEM stage pipeline register updates
+  always @(posedge clk) begin
+    EX_MEM_is_jal <= reset ? 0 : ID_EX_is_jal;
+    EX_MEM_is_jalr <= reset ? 0 : ID_EX_is_jalr;
+    EX_MEM_mem_read <= reset ? 0 : ID_EX_mem_read;
+    EX_MEM_mem_write <= reset ? 0 : ID_EX_mem_write;
+    EX_MEM_reg_write <= reset ? 0 : ID_EX_reg_write;
+    EX_MEM_mem_to_reg <= reset ? 0 : ID_EX_mem_to_reg;
+    EX_MEM_pc_to_reg <= reset ? 0 : ID_EX_pc_to_reg;
+    EX_MEM_is_halted <= reset ? 0 : ID_EX_is_halted;
+    EX_MEM_inst <= reset ? 0 : ID_EX_inst;
+    EX_MEM_rs2_dout <= reset ? 0 : ID_EX_rs2_dout;
+    EX_MEM_current_pc <= reset ? 0 : ID_EX_current_pc;
+    EX_MEM_alu_result <= reset ? 0 : EX_alu_result;
+  end
+
+  // MEM/WB stage pipeline register declarations
+  always @(posedge clk) begin
+    MEM_WB_is_jal <= reset ? 0 : EX_MEM_is_jal;
+    MEM_WB_is_jalr <= reset ? 0 : EX_MEM_is_jalr;
+    MEM_WB_reg_write <= reset ? 0 : EX_MEM_reg_write;
+    MEM_WB_mem_to_reg <= reset ? 0 : EX_MEM_mem_to_reg;
+    MEM_WB_pc_to_reg <= reset ? 0 : EX_MEM_pc_to_reg;
+    MEM_WB_is_halted <= reset ? 0 : EX_MEM_is_halted;
+    MEM_WB_inst <= reset ? 0 : EX_MEM_inst;
+    MEM_WB_dout <= reset ? 0 : MEM_dout;
+    MEM_WB_alu_result <= reset ? 0 : EX_MEM_alu_result;
+    MEM_WB_current_pc <= reset ? 0 : EX_MEM_current_pc;
+  end
+
+  // WB combinational logics
+  always @(*) begin
+    if(MEM_WB_pc_to_reg)
+      WB_din = MEM_WB_current_pc + 4;
+    else if(MEM_WB_mem_to_reg)
+      WB_din = MEM_WB_dout;
+    else
+      WB_din = MEM_WB_alu_result;
+  end
+
+  // WB sequential logics
+  always @(posedge clk) begin
+    is_halted <= reset ? 0 : MEM_WB_is_halted;
+  end
     \end{minted}
     \caption{cpu.v}
 \end{longlisting}
