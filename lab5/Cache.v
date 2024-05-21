@@ -157,7 +157,6 @@ module Cache #(
         data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS]
           <= din;
       end
-    /* TODO: Update data bank, tag bank, valid and dirty bit */
     end
   end
 
