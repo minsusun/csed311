@@ -77,6 +77,8 @@ module Cache #(
     case(state)
     `IDLE: begin
       is_ready = 1;
+      dmem_write = 0;
+      dmem_read = 0;
       is_output_valid = 1;
       is_dmem_input_valid = 0;
     end
@@ -84,17 +86,23 @@ module Cache #(
     `WRITE_WAIT: begin
       is_ready = 0;
       dmem_write = 1;
+      dmem_read = 0;
+      is_output_valid = 0;
       is_dmem_input_valid = 1;
     end
 
     `READ_WAIT: begin
       is_ready = 0;
+      dmem_write = 0;
       dmem_read = 1;
+      is_output_valid = 0;
       is_dmem_input_valid = 1;
     end
 
     default: begin
       is_ready = 1;
+      dmem_write = 0;
+      dmem_read = 0;
       is_output_valid = 1;
       is_dmem_input_valid = 0;
     end
@@ -116,8 +124,6 @@ module Cache #(
     `WRITE_WAIT: begin
       if(is_dmem_ready && !mem_rw)
         next_state = `READ_WAIT;
-      else if(is_dmem_ready && mem_rw)
-        next_state = `IDLE;
       else
         next_state = `WRITE_WAIT;
     end
@@ -146,16 +152,18 @@ module Cache #(
       end
     end else begin
       state <= next_state;
-      if(is_dmem_output_valid && dmem_read) begin
-        valid[index] <= 1'b1;
-        dirty[index] <= 1'b0;
-        tag_bank[index] <= tag;
-        data_bank[index] <= dmem_dout;
-      end else if(is_input_valid && is_hit && mem_rw) begin
-        valid[index] <= 1'b1;
-        dirty[index] <= 1'b1;
-        data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS]
-          <= din;
+      if(state == `IDLE) begin
+        if(is_dmem_output_valid && dmem_read && !mem_rw) begin
+          valid[index] <= 1'b1;
+          dirty[index] <= 1'b0;
+          tag_bank[index] <= tag;
+          data_bank[index] <= dmem_dout;
+        end else if(is_input_valid && mem_rw) begin
+          valid[index] <= 1'b1;
+          dirty[index] <= 1'b1;
+          data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS]
+            <= din;
+        end
       end
     end
   end

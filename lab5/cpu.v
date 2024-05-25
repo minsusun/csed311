@@ -362,7 +362,8 @@ module cpu(
   );
 
   assign MEM_is_input_valid = EX_MEM_mem_read || EX_MEM_mem_write;
-  assign MEM_mem_rw = !EX_MEM_mem_read && EX_MEM_mem_write;
+  // assign MEM_mem_rw = !EX_MEM_mem_read && EX_MEM_mem_write;
+  assign MEM_mem_rw = EX_MEM_mem_write;
   assign MEM_is_stall = !MEM_is_cache_ready || !MEM_is_output_valid;
 
   // MEM/WB stage pipeline register declarations
