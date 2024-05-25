@@ -3,10 +3,10 @@
 `define READ_WAIT  2'b10
 
 module Cache #(
-  parameter LINE_SIZE = 16,
+  parameter LINE_SIZE = 16
   // ALERT: NUM_SETS AND NUM_WAYS MUST BE CHANGED WHEN IMPLEMENTING SET-ASSOCIATIVE CACHE!
-  parameter NUM_SETS = 0,
-  parameter NUM_WAYS = 0
+  // parameter NUM_SETS = 0,
+  // parameter NUM_WAYS = 0
 ) (
     input reset,
     input clk,
