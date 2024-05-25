@@ -33,6 +33,7 @@ module Cache #(
   parameter LINE_SIZE_IN_BITS = LINE_SIZE * 8;
 
   // Wire declarations
+  wire is_next_idle;
   wire is_tag_match;
 
   wire [TAG_LENGTH - 1: 0] tag;
@@ -61,9 +62,10 @@ module Cache #(
 
   // Combinational logics
   assign tag = addr[31: 31 - (TAG_LENGTH - 1)];
-  assign index = addr[32 - TAG_LENGTH: 32 - TAG_LENGTH - (INDEX_LENGTH - 1)];
+  assign index = addr[31 - TAG_LENGTH: 31 - TAG_LENGTH - (INDEX_LENGTH - 1)];
   assign block_offset = addr[BLOCK_OFFSET_LENGTH + GRANULARITY - 1: GRANULARITY];
 
+  assign is_next_idle = (next_state == `IDLE);
   assign is_tag_match = (tag_bank[index] == tag);
   assign is_hit = is_tag_match && valid[index];
   assign dout = 
@@ -76,9 +78,10 @@ module Cache #(
   always @(*) begin
     case(state)
     `IDLE: begin
-      is_ready = 1;
+      is_ready = is_next_idle;
       is_output_valid = 1;
       is_dmem_input_valid = 0;
+      dmem_read = 0;
     end
 
     `WRITE_WAIT: begin
@@ -105,25 +108,31 @@ module Cache #(
   always @(*) begin
     case(state)
     `IDLE: begin
-      if(is_input_valid && !is_hit && dirty[index])
-        next_state = `WRITE_WAIT;
-      else if(is_input_valid && !is_hit && !dirty[index])
-        next_state = `READ_WAIT;
-      else
+      if (is_input_valid && mem_rw) begin
+        if (is_hit)
+          next_state = `IDLE;
+        else
+          next_state = `READ_WAIT;
+      end else if (is_input_valid && !is_hit && !mem_rw) begin
+        if (dirty[index])
+          next_state = `READ_WAIT;
+        else
+          next_state = `WRITE_WAIT;
+      end else
         next_state = `IDLE;
     end 
 
     `WRITE_WAIT: begin
-      if(is_dmem_ready && !mem_rw)
+      if (is_dmem_ready && !mem_rw)
         next_state = `READ_WAIT;
-      else if(is_dmem_ready && mem_rw)
+      else if (is_dmem_ready && mem_rw)
         next_state = `IDLE;
       else
         next_state = `WRITE_WAIT;
     end
 
     `READ_WAIT: begin
-      if(!is_dmem_output_valid)
+      if (!is_dmem_output_valid)
         next_state = `READ_WAIT;
       else
         next_state = `IDLE;
@@ -135,7 +144,7 @@ module Cache #(
 
   // Sequential logics
   always @(posedge clk) begin
-    if(reset) begin
+    if (reset) begin
       state <= `IDLE;
 
       for(i = 0; i < ENTRY_NUMBER; i = i + 1) begin
@@ -146,14 +155,15 @@ module Cache #(
       end
     end else begin
       state <= next_state;
-      if(is_dmem_output_valid && dmem_read) begin
+      if (is_dmem_output_valid && dmem_read) begin
         valid[index] <= 1'b1;
         dirty[index] <= 1'b0;
         tag_bank[index] <= tag;
         data_bank[index] <= dmem_dout;
-      end else if(is_input_valid && is_hit && mem_rw) begin
+      end else if (is_input_valid && mem_rw) begin
         valid[index] <= 1'b1;
         dirty[index] <= 1'b1;
+        tag_bank[index] <= tag;
         data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS]
           <= din;
       end
