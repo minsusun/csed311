@@ -123,7 +123,7 @@ module Cache #(
     end
 
     `READ_WAIT: begin
-      if(!is_output_valid)
+      if(!is_dmem_output_valid)
         next_state = `READ_WAIT;
       else
         next_state = `IDLE;
