@@ -338,17 +338,6 @@ module cpu(
   reg [31:0] MEM_WB_alu_result;
   reg [31:0] MEM_WB_current_pc;
 
-  // MEM stage module instantiations
-  // DataMemory data_memory(
-  //   .reset(reset),
-  //   .clk(clk),
-  //   .addr(EX_MEM_alu_result),
-  //   .din(EX_MEM_rs2_dout),
-  //   .mem_read(EX_MEM_mem_read),
-  //   .mem_write(EX_MEM_mem_write),
-  //   .dout(MEM_dout)
-  // );
-
   Cache data_cache(
     .reset(reset),
     .clk(clk),
@@ -363,7 +352,6 @@ module cpu(
   );
 
   assign MEM_is_input_valid = EX_MEM_mem_read || EX_MEM_mem_write;
-  // assign MEM_mem_rw = !EX_MEM_mem_read && EX_MEM_mem_write;
   assign MEM_mem_rw = EX_MEM_mem_write;
   assign MEM_is_stall = MEM_is_input_valid && !MEM_is_cache_ready;
   assign MEM_in_use = MEM_is_input_valid ? !MEM_is_output_valid : 0;
