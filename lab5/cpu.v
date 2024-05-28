@@ -401,10 +401,4 @@ module cpu(
   always @(posedge clk) begin
     is_halted <= reset ? 0 : MEM_WB_is_halted;
   end
-
-  // For DEBUG Sessions
-  // Use $display to print out values
-  always @(posedge clk) begin
-    // $display("%d\n", MEM_is_stall);
-  end
 endmodule
