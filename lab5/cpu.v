@@ -62,7 +62,7 @@ module cpu(
 
   // IF stage combinational logics
   assign IF_next_pc = ID_is_correct ? IF_predicted_pc : ID_next_pc;
-  assign IF_pc_write = !IF_is_stall && !MEM_is_stall && !MEM_in_use;
+  assign IF_pc_write = !IF_is_stall && !MEM_is_stall;
   assign IF_is_stall = ID_is_data_hazard || (ID_is_jalr && !ID_EX_is_jalr);
   assign IF_is_flush = ID_is_control_hazard;
 
@@ -71,7 +71,7 @@ module cpu(
   // ID stage's is_flush is asserted, its mem_write and reg_write must be 
   // de-asserted.
   always @(posedge clk) begin
-    if (!IF_is_stall && !MEM_is_stall && !MEM_in_use) begin
+    if (!IF_is_stall && !MEM_is_stall) begin
       IF_ID_is_flush <= reset ? 0 : IF_is_flush;
       IF_ID_prediction <= reset ? 0 : IF_prediction;
       IF_ID_current_pc <= reset ? 0 : IF_current_pc;
@@ -238,7 +238,7 @@ module cpu(
 
   // ID/EX stage pipeline register updates
   always @(posedge clk) begin
-    if ((!MEM_is_stall && !MEM_in_use) || reset) begin
+    if (!MEM_is_stall || reset) begin
       ID_EX_alu_src <= reset ? 0 : ID_alu_src;
       ID_EX_alu_op <= reset ? 0 : ID_alu_op;
       ID_EX_mem_read <= reset ? 0 : ID_mem_read;
@@ -300,7 +300,7 @@ module cpu(
 
   // EX/MEM stage pipeline register updates
   always @(posedge clk) begin
-    if ((!MEM_is_stall && !MEM_in_use) || reset) begin
+    if (!MEM_is_stall || reset) begin
       EX_MEM_is_jal <= reset ? 0 : ID_EX_is_jal;
       EX_MEM_is_jalr <= reset ? 0 : ID_EX_is_jalr;
       EX_MEM_mem_read <= reset ? 0 : ID_EX_mem_read;
@@ -353,8 +353,8 @@ module cpu(
 
   assign MEM_is_input_valid = EX_MEM_mem_read || EX_MEM_mem_write;
   assign MEM_mem_rw = EX_MEM_mem_write;
-  assign MEM_is_stall = MEM_is_input_valid && !MEM_is_cache_ready;
   assign MEM_in_use = MEM_is_input_valid ? !MEM_is_output_valid : 0;
+  assign MEM_is_stall = MEM_is_input_valid && !MEM_is_cache_ready || MEM_in_use;
 
   // MEM/WB stage pipeline register declarations
   always @(posedge clk) begin
