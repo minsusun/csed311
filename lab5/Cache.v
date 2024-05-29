@@ -65,47 +65,47 @@ module Cache #(
   assign index = addr[31 - TAG_LENGTH: 31 - TAG_LENGTH - (INDEX_LENGTH - 1)];
   assign block_offset = addr[BLOCK_OFFSET_LENGTH + GRANULARITY - 1: GRANULARITY];
 
-  assign is_next_idle = (next_state == `IDLE);
   assign is_tag_match = (tag_bank[index] == tag);
   assign is_hit = is_tag_match && valid[index];
+  assign is_output_valid = is_hit;
   assign dout = 
     data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS];
 
   assign dmem_din = data_bank[index];
-  assign dmem_addr = {addr[31:4], 4'b0};
+  assign dmem_addr = 
+    dmem_write ? 
+    {tag_bank[index], index, 4'b0} :
+    {addr[31: BLOCK_OFFSET_LENGTH + GRANULARITY], 4'b0};
 
   // Compute outputs with respect to the current state
   always @(*) begin
     case(state)
     `IDLE: begin
-      is_ready = is_next_idle;
-      is_output_valid = 1;
+      is_ready = 1;
       is_dmem_input_valid = 0;
       dmem_read = 0;
+      dmem_write = 0;
     end
 
     `WRITE_WAIT: begin
       is_ready = 0;
-      dmem_write = 1;
+      is_dmem_input_valid = is_dmem_ready;
+      dmem_write = !is_dmem_output_valid;
       dmem_read = 0;
-      is_output_valid = 0;
-      is_dmem_input_valid = 1;
     end
 
     `READ_WAIT: begin
       is_ready = 0;
+      is_dmem_input_valid = is_dmem_ready;
       dmem_write = 0;
-      dmem_read = 1;
-      is_output_valid = 0;
-      is_dmem_input_valid = 1;
+      dmem_read = !is_dmem_output_valid;
     end
 
     default: begin
-      is_ready = 1;
+      is_ready = 0;
+      is_dmem_input_valid = 0;
       dmem_write = 0;
       dmem_read = 0;
-      is_output_valid = 1;
-      is_dmem_input_valid = 0;
     end
     endcase
   end
@@ -114,37 +114,31 @@ module Cache #(
   always @(*) begin
     case(state)
     `IDLE: begin
-      if (is_input_valid && mem_rw) begin
-        if (is_hit)
-          next_state = `IDLE;
-        else
-          next_state = `READ_WAIT;
-      end else if (is_input_valid && !is_hit && !mem_rw) begin
+      if (is_input_valid && !is_hit) begin
         if (dirty[index])
-          next_state = `READ_WAIT;
-        else
           next_state = `WRITE_WAIT;
+        else
+          next_state = `READ_WAIT;
       end else
         next_state = `IDLE;
-    end 
+    end
 
     `WRITE_WAIT: begin
-      if (is_dmem_ready && !mem_rw)
+      if (is_dmem_ready)
         next_state = `READ_WAIT;
-      else if (is_dmem_ready && mem_rw)
-        next_state = `IDLE;
       else
         next_state = `WRITE_WAIT;
     end
 
     `READ_WAIT: begin
-      if (!is_dmem_output_valid)
-        next_state = `READ_WAIT;
-      else
+      if (is_dmem_output_valid)
         next_state = `IDLE;
+      else
+        next_state = `READ_WAIT;
     end
 
-    default: next_state = `IDLE;
+    default: 
+      next_state = `IDLE;
     endcase
   end
 
@@ -152,7 +146,6 @@ module Cache #(
   always @(posedge clk) begin
     if (reset) begin
       state <= `IDLE;
-
       for(i = 0; i < ENTRY_NUMBER; i = i + 1) begin
         valid[i] <= 1'b0;
         dirty[i] <= 1'b0;
@@ -161,17 +154,14 @@ module Cache #(
       end
     end else begin
       state <= next_state;
-      if (is_dmem_output_valid && dmem_read) begin
-        valid[index] <= 1'b1;
-        dirty[index] <= 1'b0;
+      if (state == `IDLE && is_input_valid && is_hit && mem_rw) begin
+        data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS] <= din;
+        dirty[index] <= 1;
+      end else if (state == `READ_WAIT && is_dmem_output_valid) begin
+        valid[index] <= 1;
+        dirty[index] <= 0;
         tag_bank[index] <= tag;
         data_bank[index] <= dmem_dout;
-      end else if (is_input_valid && mem_rw) begin
-        valid[index] <= 1'b1;
-        dirty[index] <= 1'b1;
-        tag_bank[index] <= tag;
-        data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS]
-          <= din;
       end
     end
   end
@@ -182,7 +172,7 @@ module Cache #(
     .clk(clk),
 
     .is_input_valid(is_dmem_input_valid),
-    .addr(dmem_addr),  // NOTE: address must be shifted by CLOG2(LINE_SIZE)
+    .addr(dmem_addr >> BLOCK_OFFSET_LENGTH),  // NOTE: address must be shifted by CLOG2(LINE_SIZE)
     .mem_read(dmem_read),
     .mem_write(dmem_write),
     .din(dmem_din),
