@@ -83,7 +83,14 @@ module Cache #(
   assign dout = data_bank[index][hit_way_index][32 * offset +: 32];
 
   assign dmem_din = data_bank[index][write_way_index];
-  assign dmem_addr = addr >> `CLOG2(LINE_SIZE);
+
+  // Computes data memory address
+  always @(*) begin
+    if (dmem_write)
+      dmem_addr = {tag_bank[index][write_way_index], index, 4'b0};
+    else
+      dmem_addr = {addr[31:4], 4'b0};
+  end
 
   // Logic that finds the index of the way that hit
   always @(*) begin
