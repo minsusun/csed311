@@ -1,12 +1,12 @@
+`include "CLOG2.v"
+
 `define IDLE       2'b00
 `define WRITE_WAIT 2'b01
 `define READ_WAIT  2'b10
 
 module Cache #(
-  parameter LINE_SIZE = 16
-  // ALERT: NUM_SETS AND NUM_WAYS MUST BE CHANGED WHEN IMPLEMENTING SET-ASSOCIATIVE CACHE!
-  // parameter NUM_SETS = 0,
-  // parameter NUM_WAYS = 0
+  parameter LINE_SIZE = 16,
+  parameter NUM_WAYS = 4
 ) (
     input reset,
     input clk,
@@ -19,32 +19,37 @@ module Cache #(
     output is_hit,
     output [31:0] dout,
     output reg is_ready,
-    output reg is_output_valid
+    output is_output_valid
 );
-  integer i;
+  integer i, j;
 
   // Parameter definitions
-  parameter INDEX_LENGTH = 4;
-  parameter BLOCK_OFFSET_LENGTH = 2;
-  parameter GRANULARITY = 2;
-  parameter TAG_LENGTH = 32 - INDEX_LENGTH - BLOCK_OFFSET_LENGTH - GRANULARITY;
-  parameter ENTRY_NUMBER = 2 ** INDEX_LENGTH;
-  parameter WORD_SIZE_IN_BITS = 2 ** GRANULARITY * 8;
-  parameter LINE_SIZE_IN_BITS = LINE_SIZE * 8;
+  // Total size of the cache in bytes
+  parameter CACHE_SIZE = 256; 
+
+  // The number of entries in a set
+  parameter NUM_SETS = (CACHE_SIZE / LINE_SIZE) / NUM_WAYS;
+
+  // Size of the tag and line in bits
+  parameter TAG_LEN = 32 - `CLOG2(CACHE_SIZE) + `CLOG2(NUM_WAYS);
+  parameter OFFSET_LEN = 2;
+
+  // Length of the index in set
+  parameter INDEX_LEN = `CLOG2(NUM_SETS);
+  parameter WAY_INDEX_LEN = `CLOG2(NUM_WAYS);
+
+  // Maximum value that an entry of lru bank can have
+  parameter [WAY_INDEX_LEN - 1: 0] MAX_LRU = NUM_WAYS[WAY_INDEX_LEN - 1: 0] - 1;
 
   // Wire declarations
-  wire is_next_idle;
-  wire is_tag_match;
-
-  wire [TAG_LENGTH - 1: 0] tag;
-  wire [INDEX_LENGTH - 1: 0] index;
-  wire [BLOCK_OFFSET_LENGTH - 1: 0] block_offset;
+  wire [TAG_LEN - 1: 0] tag;
+  wire [INDEX_LEN - 1: 0] index;
+  wire [OFFSET_LEN - 1: 0] offset;
 
   wire is_dmem_ready;
   wire is_dmem_output_valid;
-  wire [LINE_SIZE_IN_BITS - 1: 0] dmem_din;
-  wire [LINE_SIZE_IN_BITS - 1: 0] dmem_dout;
-  wire [31:0] dmem_addr;
+  wire [LINE_SIZE * 8 - 1: 0] dmem_din;
+  wire [LINE_SIZE * 8 - 1: 0] dmem_dout;
 
   // Reg declarations
   // You might need registers to keep the status.
@@ -53,29 +58,72 @@ module Cache #(
 
   reg dmem_read;
   reg dmem_write;
+  reg [31:0] dmem_addr;
   reg is_dmem_input_valid;
 
-  reg valid[ENTRY_NUMBER - 1: 0];
-  reg dirty[ENTRY_NUMBER - 1: 0];
-  reg [TAG_LENGTH - 1: 0] tag_bank[ENTRY_NUMBER - 1: 0];
-  reg [LINE_SIZE_IN_BITS - 1: 0] data_bank[ENTRY_NUMBER - 1: 0];
+  reg valid[NUM_SETS - 1: 0][NUM_WAYS - 1: 0];
+  reg dirty[NUM_SETS - 1: 0][NUM_WAYS - 1: 0];
+  reg [TAG_LEN - 1: 0] tag_bank[NUM_SETS - 1: 0][NUM_WAYS - 1: 0];
+  reg [LINE_SIZE * 8 - 1: 0] data_bank[NUM_SETS - 1: 0][NUM_WAYS - 1: 0];
+  reg [WAY_INDEX_LEN - 1: 0] lru_bank[NUM_SETS - 1: 0][NUM_WAYS - 1: 0];
+  reg [WAY_INDEX_LEN - 1: 0] lru;
+
+  reg [WAY_INDEX_LEN - 1: 0] hit_way_index;
+  reg [WAY_INDEX_LEN - 1: 0] write_way_index;
+  reg hit_way_found;
+  reg write_way_found;
 
   // Combinational logics
-  assign tag = addr[31: 31 - (TAG_LENGTH - 1)];
-  assign index = addr[31 - TAG_LENGTH: 31 - TAG_LENGTH - (INDEX_LENGTH - 1)];
-  assign block_offset = addr[BLOCK_OFFSET_LENGTH + GRANULARITY - 1: GRANULARITY];
+  assign tag = addr[31: 31 - (TAG_LEN - 1)];
+  assign index = addr[31 - TAG_LEN: 31 - TAG_LEN - (INDEX_LEN - 1)];
+  assign offset = addr[OFFSET_LEN + 1: 2];
 
-  assign is_tag_match = (tag_bank[index] == tag);
-  assign is_hit = is_tag_match && valid[index];
+  assign is_hit = hit_way_found;
   assign is_output_valid = is_hit;
-  assign dout = 
-    data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS];
+  assign dout = data_bank[index][hit_way_index][32 * offset +: 32];
 
-  assign dmem_din = data_bank[index];
-  assign dmem_addr = 
-    dmem_write ? 
-    {tag_bank[index], index, 4'b0} :
-    {addr[31: BLOCK_OFFSET_LENGTH + GRANULARITY], 4'b0};
+  assign dmem_din = data_bank[index][write_way_index];
+  assign dmem_addr = addr >> `CLOG2(LINE_SIZE);
+
+  // Logic that finds the index of the way that hit
+  always @(*) begin
+    // Notice that hit_way_index may cause unexpected behaviour when used
+    // without testing hit_way_found. Usually you may want to examine is_hit,
+    // which essencially is just an alias for hit_way_found, before using
+    // hit_way_index.
+    hit_way_found = 0;
+    hit_way_index = 0;
+
+    for (i = 0; i < NUM_WAYS; i = i + 1) begin
+      if (tag == tag_bank[index][i] && valid[index][i]) begin
+        hit_way_index = i[WAY_INDEX_LEN - 1: 0]; 
+        hit_way_found = 1;
+      end   
+    end
+  end
+
+  // Logic that finds the least recently used way in a set 
+  always @(*) begin
+    lru = 0;
+    for (i = 0; i < NUM_WAYS; i = i + 1)
+      lru = (lru_bank[index][i] == MAX_LRU) ? i[WAY_INDEX_LEN - 1: 0] : lru;
+  end
+
+  // Logic that finds the index of the way to write on
+  always @(*) begin
+    write_way_found = 0;
+    write_way_index = 0;
+
+    for (i = 0; i < NUM_WAYS; i = i + 1) begin
+      if (!valid[index][i]) begin
+        write_way_index = i[WAY_INDEX_LEN - 1: 0];
+        write_way_found = 1;
+      end
+    end
+
+    if (!write_way_found)
+      write_way_index = lru;
+  end
 
   // Compute outputs with respect to the current state
   always @(*) begin
@@ -114,31 +162,14 @@ module Cache #(
   always @(*) begin
     case(state)
     `IDLE: begin
-      if (is_input_valid && !is_hit) begin
-        if (dirty[index])
-          next_state = `WRITE_WAIT;
-        else
-          next_state = `READ_WAIT;
-      end else
+      if (is_input_valid && !is_hit)
+        next_state = dirty[index][write_way_index] ? `WRITE_WAIT : `READ_WAIT;
+      else
         next_state = `IDLE;
     end
-
-    `WRITE_WAIT: begin
-      if (is_dmem_ready)
-        next_state = `READ_WAIT;
-      else
-        next_state = `WRITE_WAIT;
-    end
-
-    `READ_WAIT: begin
-      if (is_dmem_output_valid)
-        next_state = `IDLE;
-      else
-        next_state = `READ_WAIT;
-    end
-
-    default: 
-      next_state = `IDLE;
+    `WRITE_WAIT: next_state = is_dmem_ready ? `READ_WAIT : `WRITE_WAIT;
+    `READ_WAIT: next_state = is_dmem_output_valid ? `IDLE : `READ_WAIT;
+    default: next_state = `IDLE;
     endcase
   end
 
@@ -146,22 +177,38 @@ module Cache #(
   always @(posedge clk) begin
     if (reset) begin
       state <= `IDLE;
-      for(i = 0; i < ENTRY_NUMBER; i = i + 1) begin
-        valid[i] <= 1'b0;
-        dirty[i] <= 1'b0;
-        tag_bank[i] <= {TAG_LENGTH{1'b0}};
-        data_bank[i] <= {LINE_SIZE_IN_BITS{1'b0}};
+
+      for(i = 0; i < NUM_SETS; i = i + 1) begin
+        for(j = 0; j < NUM_WAYS; j = j + 1) begin
+          valid[i][j] <= 0;
+          dirty[i][j] <= 0;
+          tag_bank[i][j] <= 0;
+          data_bank[i][j] <= 0;
+          lru_bank[i][j] <= j[WAY_INDEX_LEN - 1: 0];
+        end
       end
+
     end else begin
       state <= next_state;
+
       if (state == `IDLE && is_input_valid && is_hit && mem_rw) begin
-        data_bank[index][WORD_SIZE_IN_BITS * block_offset +: WORD_SIZE_IN_BITS] <= din;
-        dirty[index] <= 1;
-      end else if (state == `READ_WAIT && is_dmem_output_valid) begin
-        valid[index] <= 1;
-        dirty[index] <= 0;
-        tag_bank[index] <= tag;
-        data_bank[index] <= dmem_dout;
+        data_bank[index][hit_way_index][32 * offset +: 32] <= din;
+        dirty[index][hit_way_index] <= 1;
+      end 
+      
+      if (state == `READ_WAIT && is_dmem_output_valid) begin
+        valid[index][write_way_index] <= 1;
+        dirty[index][write_way_index] <= 0;
+        tag_bank[index][write_way_index] <= tag;
+        data_bank[index][write_way_index] <= dmem_dout;
+      end
+
+      if (state == `IDLE && is_input_valid && is_hit) begin
+        for (i = 0; i < NUM_WAYS; i = i + 1) begin
+          if (lru_bank[index][i] != MAX_LRU)
+            lru_bank[index][i] <= lru_bank[index][i] + 1;
+        end
+        lru_bank[index][hit_way_index] <= 0;
       end
     end
   end
@@ -172,7 +219,7 @@ module Cache #(
     .clk(clk),
 
     .is_input_valid(is_dmem_input_valid),
-    .addr(dmem_addr >> BLOCK_OFFSET_LENGTH),  // NOTE: address must be shifted by CLOG2(LINE_SIZE)
+    .addr(dmem_addr),  // NOTE: address must be shifted by CLOG2(LINE_SIZE)
     .mem_read(dmem_read),
     .mem_write(dmem_write),
     .din(dmem_din),
