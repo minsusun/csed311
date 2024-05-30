@@ -6,7 +6,7 @@
 
 module Cache #(
   parameter LINE_SIZE = 16,
-  parameter NUM_WAYS = 2
+  parameter NUM_WAYS = 16
 ) (
     input reset,
     input clk,
