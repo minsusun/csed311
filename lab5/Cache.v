@@ -1,12 +1,12 @@
 `include "CLOG2.v"
 
 `define IDLE       2'b00
-`define DMEM_WRITE 2'b01
-`define DMEM_READ  2'b10
+`define WRITE_WAIT 2'b01
+`define READ_WAIT  2'b10
 
 module Cache #(
   parameter LINE_SIZE = 16,
-  parameter NUM_WAYS = 4
+  parameter NUM_WAYS = 2
 ) (
     input reset,
     input clk,
@@ -31,12 +31,12 @@ module Cache #(
   parameter NUM_SETS = (CACHE_SIZE / LINE_SIZE) / NUM_WAYS;
 
   // Size of the tag and line in bits
-  parameter TAG_LEN = 32 - `CLOG2(CACHE_SIZE) + `CLOG2(NUM_WAYS);
+  parameter TAG_LEN = 32 - (`CLOG2(CACHE_SIZE)) + (`CLOG2(NUM_WAYS));
   parameter OFFSET_LEN = 2;
 
   // Length of the index in set
-  parameter INDEX_LEN = `CLOG2(NUM_SETS);
-  parameter WAY_INDEX_LEN = `CLOG2(NUM_WAYS);
+  parameter INDEX_LEN = (`CLOG2(NUM_SETS));
+  parameter WAY_INDEX_LEN = (`CLOG2(NUM_WAYS));
 
   // Maximum value that an entry of lru bank can have
   parameter [WAY_INDEX_LEN - 1: 0] MAX_LRU = NUM_WAYS[WAY_INDEX_LEN - 1: 0] - 1;
@@ -226,7 +226,7 @@ module Cache #(
     .clk(clk),
 
     .is_input_valid(is_dmem_input_valid),
-    .addr(dmem_addr >> NUM_BLOCK_OFFSET_BITS),  // NOTE: address must be shifted by CLOG2(LINE_SIZE)
+    .addr(dmem_addr),  // NOTE: address must be shifted by CLOG2(LINE_SIZE)
     .mem_read(dmem_read),
     .mem_write(dmem_write),
     .din(dmem_din),

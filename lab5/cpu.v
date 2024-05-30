@@ -4,8 +4,33 @@ module cpu(
     input reset,
     input clk,
     output reg is_halted,
-    output [31:0] print_reg [0:31]
+    output [31:0] print_reg [0:31],
+    output integer mem_access_count,
+    output integer cache_hit_count
 );
+  // To calculate cache hit ratio
+  initial begin
+    mem_access_count = 0;
+    cache_hit_count = 0;
+  end
+
+  event mem_access;
+  event hit;
+
+  always @(EX_MEM_current_pc) begin
+    if (MEM_is_input_valid)
+      -> mem_access;
+
+    if (MEM_is_hit && MEM_is_input_valid)
+      -> hit;
+  end
+
+  always @(mem_access)
+    mem_access_count <= mem_access_count + 1;
+
+  always @(hit)
+    cache_hit_count <= cache_hit_count + 1;
+
   // Wire naming convention
   // When a wire signal is generated in {STAGE_NAME}, 
   // the name of the wire is {STAGE_NAME}_WIRENAME

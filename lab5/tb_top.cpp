@@ -15,6 +15,9 @@ using namespace std;
 #define MAX_SIM_TIME 1000000
 int sim_time = 0;
 int total_cycle = 0;
+int acc_count = 0;
+int hit_count = 0;
+int prev_input_valid_sig = 0;
 
 void next_cycle(Vtop *dut, VerilatedVcdC *m_trace)
 {
@@ -30,7 +33,7 @@ void next_cycle(Vtop *dut, VerilatedVcdC *m_trace)
 int main(int argc, char **argv, char **env)
 {
     // TO DO : CHANGE "filename" TO PROVIDED "answer_*.txt" PATH
-    string filename = "./student_tb/naive_ripes_result.txt";
+    string filename = "./student_tb/opt_ripes_result.txt";
     ifstream file(filename);
     stringstream ss;
     string reg_hex;
@@ -98,6 +101,8 @@ int main(int argc, char **argv, char **env)
         }
     }
     cout << "Correct output : " << correct_count << "/32" << endl;
+    cout << "Memory access count : " << dut->mem_access_count << endl;
+    cout << "Hit count : " << dut->cache_hit_count << endl;
 
     m_trace->close();
     file.close();

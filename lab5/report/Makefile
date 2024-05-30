@@ -11,4 +11,4 @@ open:
 
 .PHONY: clean
 clean: 
-	rm -r *.aux *.log _minted-report
+	rm -r *.aux *.log _minted-report 
